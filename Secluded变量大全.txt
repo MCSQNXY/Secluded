@@ -1,0 +1,6119 @@
+
+//词库引擎 Lexicon(简称"Lex") 最大优点就是词库语句解析速度非常快 (｢･ω･)｢嘿 三百万行的词库平均1.5秒装载完毕(其实还可以压缩至几百毫秒的 我觉得没有必要 也写起来也麻烦 也就不优化了 嘿嘿嘿) 但是瞬时内存占用很大 当然了很少很少有人写到万行的词库 百万行的词库也就...
+//引擎成立 2021-07-18
+//词库编辑者 MCSQNXY
+
+
+
+
+
+
+
+//Android 端   词库存储路径 内部存储  /sdcard/Android/data/mcsq.nxa.secluded/engine/机器人账号/lexicon/
+//Android 端   词库存储路径 外部存储  /sdcard/Secluded/engine/机器人账号/lexicon/
+//Windows 端   词库存储路径  主程序(.exe)运行目录/engine/机器人账号/lexicon/
+//Linux 端     词库存储路径  主程序(.out)运行目录/engine/机器人账号/lexicon/
+
+
+
+
+
+
+
+
+
+
+
+//我是注释 类型1
+##我是注释 类型2
+&&我是注释 类型3
+//注释方式一共有三种看个人喜好吧(类型1 2 3也代表着引擎执行顺序 1为最快认出是注释行 当然了这速度几乎忽略不计(ಡωಡ) )
+//每行的开头两个字节如果是//或##或&&就认定为注释行
+//注释行在装载词库的时候是不会被装载的(装载你可以理解该行不会加载到内存里面)
+//一个合法的词汇应该是 head+body
+//也就是
+//.....................其它行........
+// 测试
+// OK
+//.....................其它行........
+//在这中间不允许出现断行情况 也就是下面的情况
+//.....................其它行........
+// 测试
+// .............这里出现断行....
+// OK
+//.....................其它行........
+//这种情况没有进行注释的话 装载的时候会报语法错误 但是不影响其它语句的装载(该行不会被装载到内存 直接忽略该行)
+
+
+
+
+
+
+
+//词库引擎 采用的全局 正则表达式 文法 ECMAScript
+
+
+
+
+
+
+//你好   //这个是词汇头采用 正则表达式 进行判断
+//好的   //这个是词汇体 也是回复内容
+//666    //这个是词汇体 
+//这里空行意味着词汇体结束
+
+
+
+
+
+//你在群聊/私聊 发送 一个 '测试'
+//如果不出意外的话 机器人就会回复你
+//下面是就是 上面的例子
+
+
+
+
+测试
+%昵称%(%QQ%) 好的
+
+
+
+
+消息
+%MSG%\n\n
+//返回 Json 格式
+%MSGJ%
+
+
+
+
+
+
+
+
+
+
+//%%是取变量运算符 %变量名%
+//或者 函数方式 $取变量 变量名$
+//下面是一些变量
+//%登录账号% 登录账号/机器人账号
+//%Account% 登录账号/机器人账号
+//%Robot% 登录账号/机器人账号
+//%QQ% %Uin% 操作者QQ
+//%UinName% %昵称% 操作者昵称
+//%群号% %GroupId% %群% %Groupid% 消息所在群聊号码
+//%MSG% 消息(如果不知道是干什么的就输出一下就知道了)
+//其它变量下面全部有写 你们自己慢慢看
+// %...% 为变量
+//简单来说 变量名 就是一个麻袋 把我要装的东西塞进去 然后要用的时候 取出来
+
+
+
+
+
+
+
+//函数用法
+//词库函数就是 $...$ 这种 定义如下 $函数名称 参数1 参数2 参数N ...$
+//函数不支持套娃写法 就是 $函数1 我是参数 $函数2 参数0$ 参数1$ 这种情况
+//自定义路径正斜杠(/)或双反斜杠(\\)通用
+//读取配置数据 $读 自定义路径 键 默认值$   列如 $读 NXA/dic.db a 0$
+//写入配置数据 $写 自定义路径 键 值$   列如 $写 NXA/dic.db a 100$
+
+
+
+
+//变量函数
+//形式1 K:V 这种是当字节做键 多字节做值   单字节为键一般为字母和数字比较多
+//形式2 键:值 这种是三字节做键 多字节做值   三字节做值一般为单汉字 需要特别注意 如果 'AAA:...' 或者 '123:...' 'Ab0:...' 这种情况属于三字节是变量函数 
+//形式3 使用 $变量 键 值$ 创建变量 这种弥补了前面两个的不足 属于 多字节做键 多字节做值
+
+
+
+
+测试变量函数
+A:4
+B:666
+好:6
+的:110
+$变量 哈哈哈666 我是变量内容$
+%A%\n
+%B%\n
+%好%\n
+%的%\n
+%哈哈哈666%
+
+
+
+
+
+//行变量结构定义
+//#->var:
+//变量内容
+//变量内容
+//变量内容
+//变量内容
+//#->var:变量名
+
+
+
+
+行变量
+#->var:
+[
+    5,
+    6,
+    %QQ%
+]
+#->var:A55555
+变量内容:\n\n
+%A55555%
+
+
+
+
+
+
+
+消息来源
+//这是一个变量 直接获取消息来源
+来源:%消息来源%
+
+
+
+
+//通过函数方式进行判断
+//判断消息来源 是 返回 1   否 返回 0
+//$群聊消息$
+//$好友消息$
+//$临时消息$
+//$系统消息$
+//$空间消息$
+//$频道消息$
+
+
+
+
+
+
+
+
+
+
+
+
+//这是一个%MSG%消息对于理解消息变量和函数有重要作用(不要问我为什么要这样搞...因为消息推送给插件就是这样的 这个词库引擎就是在此基础上的一个插件罢了 Android端插件就是这样的 前提是你得会Java基础)
+//这是一个群聊文本消息
+//[{Account=3450589608,Bubble=0,Group=Group,GroupId=647990153,GroupName=临时,MsgId=4404,Text=测试,Time=1658155928,Title=012345678912345678,Typeface=宋体,Uin=3337140142,UinName=MCSQNXY}]
+//这是一个群聊语音消息
+//[{Account=3450589608,Bubble=0,Group=Group,GroupId=647990153,GroupName=临时,MD5=E06C9B17A1912756582B3951B6D5F1EB,MsgId=4406,Ptt=E06C9B17A1912756582B3951B6D5F1EB.amr,Time=1658156035,Title=012345678912345678,Typeface=宋体,Uin=3337140142,UinName=MCSQNXY,Url=http://sz.c2c.qq.com/?ver=0&rkey=3062020101045b30590201010201010204cdabd1a804243938504f6a4230664d70635754576155494a5635783656396d7852615634424a6c375f57020462d57403041f0000000866696c6574797065000000013100000005636f64656300000001310400&filetype=1&voice_codec=1}]
+//这是一个群聊图片消息
+//[{Account=3450589608,Bubble=0,Group=Group,GroupId=647990153,GroupName=临时,Heigth=196,Img=68FBC5FA3E594E60383B91F949F57B9B.gif,MD5=68FBC5FA3E594E60383B91F949F57B9B,MsgId=4407,Size=549895,Time=1658156079,Title=012345678912345678,Typeface=宋体,Uin=3337140142,UinName=MCSQNXY,Url=https://gchat.qpic.cn/gchatpic_new/3337140142/647990153-3095359158-68FBC5FA3E594E60383B91F949F57B9B/0?term=2,Width=235}]
+//这是一个心跳包消息 我喜欢叫它系统消息
+//[{Account=3450589608,Heartbeat=Heartbeat,System=System}]
+//如果消息出现Unauthorized则登录账号是未授权用户
+//比如
+//[{Account=3450589608,Heartbeat=Heartbeat,System=System,Unauthorized=Unauthorized}]
+
+
+
+
+
+//下面这一段是消息函数与自定义消息函数
+//注意 消息 和 自定义消息 统称 消息包
+//也就是开头看见的 [{...},{...},{...}] 这种 花括号的是指 引索 从左往右 引索 依次为 0 1 2 ...
+//$获取消息 ...$ 函数会具体讲引索作用
+//往待发送的消息新增数据(结合刚才的那个开头tag=value你应该清楚这两个了吧 没有值的情况下value部分使用tag进行填充 这也就是为什么群消息的tag会 Group=Group 了)
+//$添加消息 tag$
+//$添加消息 tag value$
+//这下面两个和上面那两个用法差不多(下面的指自定义消息)
+//$添加消息 msg对象 tag$
+//$添加消息 msg对象 tag value$
+//注意 $添加消息 tag value$ 和 $添加消息 msg对象 tag$ 属于 冲突函数(函数名称一样 参数类型不一样) 会被引擎认定为同一个函数
+//执行流程 先找 msg对象 看看有没有 如果有则执行 $添加消息 msg对象 tag$ 没有对象则执行 $添加消息 tag value$
+//判断消息里面有没有某个消息tag
+//$存在消息 tag$     //这个是指收到的消息
+//$存在消息 msg对象 tag$     //这个是指自定义消息
+//下面是获取消息 tag是非纯数字(纯数字引索=[0,2147483647]) 下面的 冲突函数 先判断参数是不是 引索 再判断 msg对象 再tag
+//$获取消息 tag$
+//$获取消息 tag 默认值$
+//$获取消息 引索 tag$       引索这个东西就是位置 比如消息 [{Group=Group,Uin=100,...},{Uin=220,...},{...,Group=Group,...,Uin=333}] $获取消息 0 Uin$ 就是取出第一个花括号里面Uin的值 100   $获取消息 2 Uin$ 取出第三个花括号里面Uin的值 333   第一个花括号为引索0 第二个花括号为引索1 以此类推
+//$获取消息 引索 tag 默认值$
+//$获取消息 msg对象 tag$
+//$获取消息 msg对象 引索 tag$
+//$获取消息 msg对象 tag 默认值$
+//$获取消息 msg对象 引索 tag 默认值$
+//看了上面这么多 接下来就是创建自定义消息了
+//就这下面一条函数 非常简单
+//$新建消息 自定义键$     //自定义键也就是上面所说的 msg对象 禁止纯数字做键(获取消息函数冲突)
+//自定义消息有了就差发送了
+//就这下面这两条
+//$发送消息 msg对象$     //直接发送请求
+//$发送消息 msg对象 B$     //直接发送请求并把请求结果放到变量B 这个变量B也属于 msg对象 获取值 和 判断tag 用法和上面所说的一样
+//获取消息tag数量
+//$获取消息Size tag$
+//$获取消息Size msg对象 tag$
+
+
+
+
+//下面一个实列消息(在群聊发送：'测试函数消息' 正常的话你会看到两段消息)
+测试函数消息
+//新建对象
+$新建消息 A$
+//声明发送群聊消息
+$添加消息 A Group$
+//声明发送群号
+$添加消息 A GroupId %群号%$
+//声明消息 注意使用函数进行消息换行不是使用 \n 而是使用 \r
+//添加文本消息
+$添加消息 A Text 哈哈哈\r$
+//添加文本消息
+$添加消息 A Text 666666$
+//添加图片消息
+$添加消息 A Img https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//发送
+$发送消息 A B$
+//发送结果
+%B%
+
+
+
+//获取一个tag的值 这个写法 比 获取消息 函数更加方便
+//方式1 %tag%   获取接收到的消息中的值 看%MSG%
+//方式2 %tag:index%   获取接收到的消息中指定引索的值 看%MSG%
+//方式3 %object:tag%   获取指定对象中的消息值
+//方式4 %object:tag:index%   获取指定对象中指定引索的消息值
+//这里的引索都是重新组成的 而不是消息函数那里介绍的引索
+//比如 消息 [{DisableStringEncoding=DisableStringEncoding},{Text=哈哈哈0},{Text=哈哈哈1},{Text=哈哈哈2},{Text=哈哈哈3}]
+//第一个 花括号 {Text=哈哈哈0} 的引索是 1
+//那么取Text值的时候 会把'Text'这个tag的值全部重新组合
+//变成 类似于 JSON数组 [哈哈哈0,哈哈哈1,哈哈哈2,哈哈哈3]
+//用 %Text:0% 取出的值 就是 哈哈哈0 了
+//用 %Text:2% 取出的值 就是 哈哈哈2 了
+//而不是 %MSG% 那个花括号的引索 这两个需要区分一下
+
+
+
+
+取值1
+%MSG%\n\n\n
+%Text%
+
+
+取值2
+%MSG%\n\n\n
+%Text:0%
+
+
+取值3
+$新建消息 A$
+$添加消息 A Text 哈哈哈0$
+$添加消息 A Text 哈哈哈1$
+$添加消息 A Text 哈哈哈2$
+$添加消息 A Text 哈哈哈3$
+%A%\n\n\n
+%A:Text%
+
+
+
+取值4
+$新建消息 A$
+$添加消息 A Text 哈哈哈0$
+$添加消息 A Text 哈哈哈1$
+$添加消息 A Text 哈哈哈2$
+$添加消息 A Text 哈哈哈3$
+%A%\n\n\n
+%A:Text:2%
+
+
+
+
+
+
+//休眠函数
+//$休眠 时间$
+//这里的线程休眠指的是延时执行下一行语句
+//时间单位是毫秒(ms) 取值区间=(0,9223372036854775807]
+//用法 $休眠 1000$ 延时1秒 执行下一行语句
+
+
+//循环函数
+//$循环 行 次$
+//%循环索%这个是循环引索(只在循环函数执行期间有效)
+//下面是一个标准词库
+// 测试      这个是头部
+// 哈哈哈      第1行
+// 666      第2行
+// $循环 4 2$      第3行
+// $图片 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$      第4行
+// 第N行         第5行
+// Ok      第6行
+//当引擎执行到 第5行 时候
+//第四行已经执行 2+1 次
+//+1次 是因为当前引擎 在第三行位置 执行此函数会重复执行第四行两次 当引擎执行到第四行又会被执行本身一次所以就是 2+1 次
+//需要特别注意写法 以免导致死循环 还有行不要越界 下面的 清屏 就是 循环函数 用例
+
+清屏
+$循环 3 5$
+$跳转 2$
+%循环索%\n
+完成
+
+//跳转函数
+//$跳转 行$
+//这个函数一般都是配合 循环函数 进行使用的✺◟(∗❛ัᴗ❛ั∗)◞✺
+//下面是一个标准词库
+//测试 头部
+//好的 -3行
+//666 -2行
+//888 -1行
+//$跳转 2$ 跳转到 第2行 执行
+//OK      第1行
+//嗯嗯嗯     第2行
+//没错这个是以 跳转函数 为基准 向上为负行 向下为正行
+//当引擎执行到 跳转函数 正常的话 第1行 词汇体 不会执行 直接跳转到 第2行 继续执行
+//需要特别注意的是 如果 跳转行 为 负行 需要特别注意 这个操作 有可能导致 死循环
+//因为引擎跳转完成开始执行目标行 如果你没有写其它分支 可能导致又执行到 跳转函数 那么就会 一直跳转 最终 死循环
+//下面是测试词汇 没错这个是 清屏的 跳转函数 可以解决 行再执行一次的问题
+//注意 注释行 不算 一行 这行 加载时已经被丢弃
+
+
+
+
+测试跳转函数
+$循环 3 10$
+$跳转 2$
+%循环索%\n
+完成
+
+
+
+
+
+
+//中断函数
+//$中断$
+//就是不执行下一行词汇体
+//仅当前执行线程有效
+//下面是测试词汇
+
+测试中断函数
+哈哈哈
+$中断$
+Ok
+
+
+
+
+
+//摘要函数
+//$MD5 值$   计算文本MD5
+//$SHA1 值$   计算文本SHA1
+//$SHA256 值$   计算文本SHA256
+
+测试摘要函数
+文本=%MsgId%\n
+MD5=$MD5 %MsgId%$\n\n
+SHA256=$SHA256 %MsgId%$
+
+
+
+
+//获取本地文件的摘要
+//$文件MD5 路径$
+//$文件SHA1 路径$
+//$文件SHA256 路径$
+
+
+
+获取文件摘要
+S:S:/A.png
+文件大小 $文件大小 %S%$ 字节\n\n
+MD5 $文件MD5 %S%$\n\n
+SHA1 $文件SHA1 %S%$\n\n
+SHA256 $文件SHA256 %S%$\n\n
+
+
+
+
+
+
+
+
+
+
+
+
+
+//正则函数
+//$正则 原字符串 表达式$
+
+测试正则函数
+A:哈哈哈http://666
+B:.*http.*
+结果:$正则 %A% %B%$
+
+
+
+
+
+
+//替换函数
+//方式1 $替换 原字符串 老值 新值$
+//方式2 $替换 分割符 原字符串'分割符'老值'分割符'新值$
+
+
+测试替换函数
+A:201119
+B:11
+C:2
+文本:%A%\n
+老值:%B%\n
+新值:%C%\n\n
+方式1:\n$替换 %A% %B% %C%$\n\n
+方式2:\n$替换 ### %A%###%B%###%C%$
+
+
+
+
+
+
+
+
+
+
+//取中间函数
+//方式1 $取中间 原字符串 左值 右值$
+//方式2 $取中间 分割符 原字符串'分割符'左值'分割符'右值$
+//注意 如果 左值 或 右值 不存在会抛出语法错误
+
+测试取中间函数
+A:2019
+B:2
+C:9
+文本:%A%\n
+左值:%B%\n
+右值:%C%\n\n
+方式1:\n$取中间 %A% %B% %C%$\n\n
+方式2:\n$取中间 @@@ %A%@@@%B%@@@%C%$
+
+
+
+
+
+
+//访问函数
+//$访问 链接$
+//$访问 GET 网址 请求头(JSON格式) 应答头结果键$
+//$访问 POST 网址 POST参数$
+//$访问 POST 网址 POST参数 请求头(JSON格式) 应答头结果键$
+//$访问 POSTUP 网址 本地文件路径$   提交文件
+//$访问 POSTUP 网址 本地文件路径 请求头(JSON格式) 应答头结果键$
+//此函数是同步线程执行
+//请求框架默认使用:curl
+
+
+测试访问函数
+访问结果\n\n$访问 http://api.secnet.cc/demo.php$
+
+
+
+
+
+测试访问函数3
+U:http://qm.ayzfdark.com:9000/admin
+P:cmd=login&username=123&password=123
+//自定义请求头 设置Cookie
+H:{"cookie":"a=666"}
+//提交POST
+K:$访问 POST %U% %P% %H% R$
+//获取应答头的Cookie
+C:@R[Set-Cookie]
+%K%\n\n
+%C%\n\n
+@R[Content-Type]
+
+
+
+
+
+//取消 $访问 PROXY$
+//设置 $访问 PROXY 地址:端口$
+//全局访问代理服务器
+//词库加载成功调用一次即可
+
+
+
+
+设置代理服务器
+$访问 PROXY 127.0.0.1:7890$
+已设置
+
+
+取消代理服务器
+$访问 PROXY$
+已取消
+
+
+测试访问谷歌
+结果 $访问 https://www.google.com/complete/search?q&cp=0&client=gws-wiz&xssi=t&gs_pcrt=2&hl=zh-CN&authuser=0&psi=0pqQZonzE-SPvr0P38yakAw.1720752850399&dpr=1.5&nolsbt=1$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//存在函数
+//$存在 原字符串 目标$
+
+测试存在函数
+A:123
+B:2
+字符串:%A%\n
+找文本:%B%\n
+找结果:$存在 %A% %B%$\n
+如果:$存在 %A% %B%$
+找到了
+返回
+如果尾
+没有找到哦
+
+
+
+
+
+
+
+测试存在函数([\s\S]*)
+A:%Text%
+B:http
+字符串:%A%\n
+找文本:%B%\n
+找结果:$存在 %A% %B%$\n
+如果:$存在 %A% %B%$
+找到了
+返回
+如果尾
+没有找到哦
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+测试写入
+$写 哈哈哈/蜜儿娜.txt k %MsgId%$
+写入 %MsgId%
+
+
+测试写入2
+c:100
+正在写入 %c% 个数据 请耐心等待
+$发送$
+i:0
+s:%时间戳毫秒%
+:b
+如果:%i%<%c%
+$写 蜜儿娜.txt %i% %MsgId%$
+i:[%i%+1]
+$标签跳转 b$
+返回
+如果尾
+写入 %c% 个数据耗时 [%时间戳毫秒%-%s%] 毫秒
+
+
+测试写入3
+s:%时间戳毫秒%
+$写 蜜儿娜.txt 114514 %MsgId%$
+耗时 [%时间戳毫秒%-%s%] 毫秒
+
+
+测试随机写入
+k:%随机数%
+v:%随机数%
+$写 蜜儿娜.txt %k% %v%$
+写入 %k%=%v%
+
+
+测试读取
+A:$读 哈哈哈/蜜儿娜.txt k 0$
+读取 %A%
+
+
+
+测试写入换行
+$写 蜜儿娜.txt 换行 a\nb$
+Ok
+
+测试读取换行
+$读 蜜儿娜.txt 换行 N/A$
+
+
+
+
+//$配置文件 文件路径 密钥 值$
+//设置加密的密钥
+//没有设置则使用默认密钥
+
+
+
+
+
+
+//$加密读 路径 键 默认值$
+
+
+测试加密读取
+$配置文件 哈哈哈/加密.txt 密钥 7785258$
+读取 $加密读 哈哈哈/加密.txt k 0$
+
+
+
+
+
+//$加密写 路径 键 值$
+
+
+测试加密写入
+$配置文件 哈哈哈/加密.txt 密钥 7785258$
+$加密写 哈哈哈/加密.txt k %MsgId%$
+写入 %MsgId%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//删除 一个键
+//$配置文件 文件路径 删除 键$
+//删除 全部键
+//$配置文件 文件路径 清空$
+
+
+测试删除
+$配置文件 蜜儿娜.txt 删除 k$
+好的
+
+
+//是否存在一个键
+//$配置文件 文件路径 存在 键$
+//返回 1 或 0 可用直接放到如果后面
+
+
+测试存在
+$配置文件 蜜儿娜.txt 存在 k$
+
+
+//获取键的数量 也是值的数量
+//$配置文件 文件路径 数量$
+
+
+测试数量
+$配置文件 蜜儿娜.txt 数量$
+
+
+
+配置文件转JSON
+$配置文件 蜜儿娜.txt JSON$
+
+
+配置文件转键
+$配置文件 蜜儿娜.txt 键$
+
+
+配置文件转值
+$配置文件 蜜儿娜.txt 值$
+
+
+
+//保存
+//$配置文件 文件路径 保存$
+//由于 这些 增删改查 不会立即保存到文件
+//必须等当前词汇全部执行完毕才会统一写入文件
+//有必要可以强制保存
+
+
+
+
+//指定数据存储目录
+//$数据目录 父路径$
+//当前词库全局生效
+
+
+
+
+重置数据目录
+OK
+$数据目录 N/A$
+
+
+
+测试写入6
+$数据目录 S:\SecludedWin\x64\Debug\AAA$
+$写 蜜儿娜.txt k %MsgId%$
+写入 %MsgId%
+
+
+
+
+
+
+
+
+//抛出错误
+//$Throw 内容$
+
+
+
+
+//调用函数
+//$调用 词汇头$   立即调用   这个是异步线程 不等待执行完毕
+
+测试立即调用
+OK
+//共享变量A
+A:666
+$调用 立即调用$
+
+立即调用
+变量A:%A%\n
+执行了立即调用
+
+//$调用 延时 词汇头$   先休眠(单位:毫秒) 再调用   这个是异步线程 不等待执行完毕
+
+测试延时调用
+//共享变量A
+A:%随机数%
+Ok
+$调用 5000 延时调用$//休眠2秒
+
+延时调用
+我是延时调用消息:%A%
+
+
+
+
+//回调函数
+//$回调 内部词汇头$
+//用于调用某个 [内部] 开头的词汇 仅 回调函数 可执行 [内部] 开头的词汇
+
+
+测试回调函数
+//定义变量A
+A:666
+$回调 测试$
+变量B:%B%
+
+[内部]测试
+//使用 变量A
+变量A:%A%\n
+//定义变量B
+B:777
+
+
+
+测试调用内部
+$调用 测试$
+
+
+
+
+//[总处理]
+//[总处理]:%Text%
+//消息过滤器
+
+//[总处理]
+//这个是词汇头
+//类似于 ([\s\S]*)
+//可以处理带 [内部] 开头的消息
+
+//[总处理]:%Text%
+//这个是继续执行下一个词汇头 固定搭配
+//类似于调用
+//"[总处理]:" 就是充当调用的角色
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//全体禁言
+//开启 $全体禁言 开 群号 结果键(可无)$
+//关闭 $全体禁言 关 群号 结果键(可无)$
+//结果好像并没有太大作用(暂时不能判断是否开启或关闭成功,只能结合消息来判断是否开启或关闭成功)
+//下面是测试词汇
+
+开启全体禁言
+$全体禁言 开 %群号% A$
+%A%
+
+关闭全体禁言
+$全体禁言 关 %群号% A$
+%A%
+
+
+
+
+
+[群聊消息]全体禁言被开
+%昵称%(%QQ%)开启了全体禁言\n\n
+%MSG%
+
+
+
+[群聊消息]全体禁言被关
+%昵称%(%QQ%)关闭了全体禁言\n\n
+%MSG%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//禁言成员
+//$禁 群号 对象 时长 结果键(可无)$
+//$禁言 群号 对象 时长 结果键(可无)$
+//时长单位为秒 时长为0 则为解禁
+//下面是测试词汇
+
+测试禁言函数
+$禁 %群号% %QQ% 60 A$//禁言60秒
+已经对:%QQ%执行禁言操作,若禁言失败,请检查是否有群主/管理员权限\n
+%A%
+
+
+
+
+
+//踢出成员
+//$踢 群号 对象 结果键(可无)$
+//下面是测试词汇
+
+测试踢出成员
+$踢 %群号% %QQ% A$
+%A%
+
+
+踢出成员([\s\S]*)
+如果:$主人 %QQ%$
+$踢 %群号% %AtUin:0% A$
+%A%
+返回
+如果尾
+无权操作
+
+
+
+
+//频道踢出成员
+//$频道踢出 频道号 成员QQ$
+
+
+
+
+
+
+
+
+
+
+
+
+//修改群聊成员昵称
+//$改 群号 对象 昵称 结果键(可无)$
+
+测试改名片
+$改 %群号% %QQ% 我是昵称内容 A$
+%A%
+
+
+
+
+//修改群聊成员专属头衔
+//$改专属 群号 对象 昵称(最多18字节)$
+//登录账号 是 群主 身份才有效
+
+测试改专属
+$改专属 %群号% %QQ% 哈0123456789哈$
+
+
+
+
+
+我的头衔
+//格式1
+你的头衔:%头衔%\n
+//格式2
+你的头衔:%Title%
+
+
+
+我的气泡
+//格式1
+你的气泡id:%气泡%\n
+//格式2
+你的气泡id:%Bubble%
+
+
+
+
+
+
+
+
+//好友列表
+//$FriendListGet Refresh(可无) 结果键$
+//Refresh是强制刷新缓存列表(一般不携带(每隔30秒自动刷新),除非你要获取最新的列表)
+
+获取好友列表
+$FriendListGet Refresh list$
+数:$消息数量 list Uin$
+$循环 5 %数%$
+$跳转 2$
+$获取消息 list %循环索% Uin$\n
+好友数量:%数%个
+
+
+
+//群聊列表
+//$GroupListGet Refresh(可无) 结果键$
+//Refresh是强制刷新缓存列表(一般不携带(每隔30秒自动刷新),除非你要获取最新的列表)
+
+获取群聊列表
+$GroupListGet A$//获取群聊列表
+量:$消息数量 A GroupId$
+$循环 5 %量%$//循环函数
+$跳转 2$//跳转函数 不执行下一行函数
+$获取消息 A %循环索% GroupId$\n
+群聊数量:%量%个
+
+
+
+//群聊成员列表
+//$GroupMemberListGet 群号 Refresh(可无) 结果键$
+//Refresh是强制刷新缓存列表(一般不携带(每隔30秒自动刷新),除非你要获取最新的列表)
+
+获取群聊成员列表
+$GroupMemberListGet %群号% list$
+数:$消息数量 list Uin$
+$循环 5 %数%$
+$跳转 2$
+$获取消息 list %循环索% Uin$\n
+成员数量:%数%个
+
+
+//群聊不活跃成员列表
+//$GroupMemberListGetInactive 群号 Refresh(可无) 结果键$
+//Refresh是强制刷新缓存列表(一般不携带(每隔30秒自动刷新),除非你要获取最新的列表)
+
+获取群聊不活跃成员列表
+$GroupMemberListGetInactive %群号% list$
+数:$消息数量 list Uin$
+$循环 5 %数%$
+$跳转 2$
+$获取消息 list %循环索% Uin$\n
+不活跃成员:%数%个
+
+
+
+
+我是不是管理员
+//这个管理员指的是群聊管理员
+如果:$管理员 %群号% %QQ%$
+你是管理员哦
+返回
+如果尾
+你不是管理员哦
+
+
+
+
+
+
+
+测试时间变量
+年=%时间yyyy%\n
+月=%时间MM%\n
+日=%时间dd%\n
+时=%时间HH%\n
+分=%时间mm%\n
+秒=%时间ss%\n
+星期=%时间w%\n
+距离过年=[365-%时间j%]天\n
+现在时间=%时间yyyy年MM月dd日HH时mm分ss秒%
+
+//星期=%时间w%\n 取值区间=[0,6] 周日~周六
+
+
+
+
+测试时间戳
+当前秒时间戳:%时间戳秒%\n
+当前毫秒时间戳:%NDTime%\n
+当前毫秒时间戳:%时间戳毫秒%\n
+当前网络时间戳:%时间戳网络%\n
+//当前操作系统已经运行的时间(从0开始)
+当前系统时间戳:%时间戳系统%\n
+//当前框架进程启动时的时间戳
+当前进程时间戳:%时间戳进程%
+
+
+// 这个网络时间戳是 Secluded 服务器时间戳(毫秒级) UTC+0800
+// 其他四个时间戳均源于系统时间
+
+
+// %时间戳进程% == $prop 启动时间$
+
+
+
+
+
+
+
+
+//时间戳转时间
+//$时间 时间戳秒 时间格式yyyyMMddHHmmss$
+
+
+
+测试时间
+A:yyyy年MM月dd日HH时mm分ss秒
+$时间 %时间戳秒% %A%$
+
+
+
+
+//$格式时间戳 时间字符串$
+//仅支持 2024-08-12 12:30:59 格式
+
+
+
+
+格式时间戳
+A:2079-08-12 22:30:59
+R:$格式时间戳 %A%$
+时间 %A%\n\n
+时间戳秒 %R%\n\n
+B:yyyy年MM月dd日HH时mm分ss秒
+$时间 %R% %B%$
+
+
+
+
+
+
+
+
+
+
+
+
+字符长度
+A:哈哈哈
+内容:%A%\n
+长度:$字符长度 %A%$
+
+
+//主程序登录账号授权判断
+
+授权判断
+//未授权返回 1 已经授权返回 0
+未授权:$未授权$\n
+//已经授权返回 1 未授权返回 0   或者  %RobotAuth%
+已授权:$授权判断$\n
+//可以直接用来判断
+如果:$未授权$
+还没有授权哦
+返回
+如果尾
+已经授权了哦
+
+
+
+
+词库路径
+//这个是获取词库存储路径的变量
+路径\n%词库路径%
+
+
+
+
+//生成一个空文件 一天内有效 过期删除
+
+获取临时文件
+====%临时文件%
+
+
+
+
+
+
+
+
+
+
+//下载函数
+//方式1 $下载 保存路径 网址直链 结果键(可无)$
+//方式2 $下载 保存路径 网址直链$
+//方式1 相对 方式2 可以知道下载是否成功
+//这两个都是同步线程
+
+
+
+测试下载2
+A:/AA/头像.png
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+$下载 %A% %B% R$
+%R%
+
+
+
+//方式3 $下载 保存路径 网址直链 请求头JSON名 应答头JSON名$
+
+测试下载3
+A:%临时文件%
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+//这个是请求头
+C:{}
+//这个是应答头
+D:{}
+$下载 %A% %B% C D$
+$图片 %A%$
+\n\n
+%D%
+
+
+
+
+
+
+
+
+
+
+//删除函数
+//$删除 路径$ 
+//用于删除某个文件或文件夹内所有文件
+
+
+测试删除函数
+OK
+$删除 S:/1/Common$
+
+
+
+
+
+
+[系统消息]收到点赞
+//回赞
+$点赞 %QQ% 10$
+
+
+
+[群聊消息]群管添加
+%OpName%(%Op%)已将%昵称%(%QQ%)设置为管理员
+
+
+[群聊消息]群管删除
+%OpName%(%Op%)取消了%昵称%(%QQ%)的管理员身份
+
+
+
+
+
+//$群通知 %MsgId% 同意$
+//$群通知 %MsgId% 拒绝$
+//$群通知 %MsgId% 忽略$
+
+[群通知]邀请进群
+//别人邀请我进群
+$群通知 %MsgId% 同意$
+
+
+
+
+
+//$群通知 %MsgId% 同意$
+//$群通知 %MsgId% 拒绝 理由(可无)$
+//$群通知 %MsgId% 忽略$
+
+
+[群通知]别人进群主动
+%昵称%(%QQ%)申请加入本群
+$群通知 %MsgId% 同意$
+
+
+[群通知]别人进群被动
+%OpName%(%Op%)邀请%昵称%(%QQ%)申请加入本群
+$群通知 %MsgId% 同意$
+
+
+
+
+
+
+
+获取登录信息
+如果:$主人 %QQ%$
+用户账号 %用户账号%\n\n
+用户昵称 %用户昵称%\n\n
+用户性别 %用户性别%\n\n
+用户年龄 %用户年龄%岁\n\n
+//格式1
+Skey %skey%\n\n
+//格式2
+//Skey %Skey%\n\n
+//$pskey 地址$ 下面是例子 其它地址以此类推
+qun.qq.com=$pskey qun.qq.com$\n\n
+office.qq.com=$pskey office.qq.com$\n\n
+qzone.qq.com=$pskey qzone.qq.com$\n\n
+docs.qq.com=$pskey docs.qq.com$\n\n
+clt.qq.com=%clt.qq.com%\n\n\n
+%MSG%
+返回
+如果尾
+%QQ% 你无权操作
+
+
+
+测试(GTK|bkn)
+$GTK @%skey%$
+
+
+
+
+测试skey
+b:$GTK @%skey%$
+U:https://qun.qq.com/cgi-bin/qunwelcome/myinfo?callback=&bkn=%b%&ts=%时间戳秒%
+P:{}
+H:{"content-type":"application/x-www-form-urlencoded","cookie":"skey=@%skey%; p_skey=$pskey qun.qq.com$; p_uin=o%用户账号%;"}
+bkn %b%\n
+skey %skey%\n
+pskey $pskey qun.qq.com$\n\n\n
+%U%\n\n
+%H%\n\n\n
+$访问 POST %U% %P% %H% R$
+
+
+
+
+获取登录信息2
+$新建消息 A$
+$添加消息 A UserInfoGet$
+$发送消息 A B$
+%B%\n\n
+$获取消息 B Skey$
+
+
+
+
+
+
+
+
+
+
+//修改用户信息
+//$修改用户昵称 内容$
+//$修改用户性别 男/女$
+//$修改用户头像 路径/直链$
+
+
+
+
+
+修改用户昵称(.*)
+OK
+$修改用户昵称 %括号1%$
+
+
+
+修改用户性别(男|女)
+OK
+$修改用户性别 %括号1%$
+
+
+修改用户头像
+OK
+$修改用户头像 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+
+
+
+
+
+
+
+
+
+
+
+
+测试艾特@.*
+//获取第一个被艾特账号
+艾特1 %AT0%\n\n
+昵称1 %AtName0%\n\n
+//第二个 依此类推
+艾特2 %AT1%\n\n
+昵称2 %AtName1%
+//如果只有一个艾特账号也可以直接用%AtUin%
+//获取被艾特昵称用 %AtName% %AtName0% %AtName1% ...
+//如果不清楚这些可以直接输出 %MSG% 看具体消息
+
+
+
+
+邀请好友([0-9]+)
+//邀请好友进群
+$邀请 %群号% %括号1% A$
+%A%
+
+
+
+//发送视频
+//$发送视频 封面图片路径或直链 视频文件路径或直链 视频时长 进度键(可无)$   自动判断消息来源
+//$群聊视频 目标群号 封面图片路径或直链 视频文件路径或直链 视频时长 进度键(可无)$
+//$好友视频 好友QQ 封面图片路径或直链 视频文件路径或直链 视频时长 进度键(可无)$
+//$频道视频 频道号 子频道号 封面图片路径或直链 视频文件路径或直链 视频时长 进度键(可无)$
+//发送 好友/频道 视频只能25MB以内   发送 群聊 大于25MB 将以群文件形式上传 支持GB级别文件
+
+
+发送视频
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+C:https://gxh.vip.qq.com/xydata/funcall/funCall/2735/media.mp4
+D:60
+$发送视频 %B% %C% %D%$
+
+
+群聊视频
+A:%群号%
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+C:https://gxh.vip.qq.com/xydata/funcall/funCall/2735/media.mp4
+D:60
+$群聊视频 %A% %B% %C% %D% 群聊视频上传$
+
+
+好友视频
+A:%QQ%
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+C:https://gxh.vip.qq.com/xydata/funcall/funCall/2735/media.mp4
+D:60
+$好友视频 %A% %B% %C% %D%$
+
+
+频道视频
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+C:https://gxh.vip.qq.com/xydata/funcall/funCall/2735/media.mp4
+D:60
+$频道视频 %频道号% %子频道号% %B% %C% %D%$
+
+
+
+
+本地视频
+B:https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140
+C:C:\Users\MCSQNXY\Downloads\A.mp4
+D:60
+$发送视频 %B% %C% %D%$
+
+
+
+
+
+
+
+
+
+[系统消息]处理进度
+如果:%处理进度%==群聊视频上传
+视频上传中 [(%Offset%/%Size%)*100] %
+
+
+
+
+
+
+
+
+
+
+
+
+//发送自定义JSON
+//$XXX类型 群号 标题 简介 图片直链 跳转链接 音频直链$
+//参数均指变量名
+//如果下面的类型不够用还可以私聊我
+//登录账号 需要授权 才可以用
+
+
+
+
+
+
+
+咪咕分享
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$咪咕分享 %Q% %A% %B% %C% %D%$
+
+
+咪咕音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$咪咕音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+快手分享
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$快手分享 %Q% %A% %B% %C% %D%$
+
+
+快手音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$快手音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+哔哩哔哩分享
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$哔哩哔哩分享 %Q% %A% %B% %C% %D%$
+
+
+哔哩哔哩音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$哔哩哔哩音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+波点分享
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$波点分享 %Q% %A% %B% %C% %D%$
+
+
+波点音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$波点音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+爱奇艺分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$爱奇艺分享 %Q% %A% %B% %C% %D%$
+
+
+爱奇艺音乐
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$爱奇艺音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+优酷分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$优酷分享 %Q% %A% %B% %C% %D%$
+
+
+优酷音乐
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$优酷音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+百度分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$百度分享 %Q% %A% %B% %C% %D%$
+
+
+百度音乐
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$百度音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+酷我分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$酷我分享 %Q% %A% %B% %C% %D%$
+
+
+酷我音乐
+Q:%群号%
+A:我是 标题
+B:我是 555 内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$酷我音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+酷狗分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$酷狗分享 %Q% %A% %B% %C% %D%$
+
+
+酷狗音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$酷狗音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+QQ音乐分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$QQ音乐分享 %Q% %A% %B% %C% %D%$
+
+
+QQ音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$QQ音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+网易云分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$网易云分享 %Q% %A% %B% %C% %D%$
+
+
+网易云音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$网易云音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+简书分享
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$简书分享 %Q% %A% %B% %C% %D%$
+
+
+简书音乐
+Q:%群号%
+A:我是标题
+B:我是内容
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$简书音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+
+
+
+
+//  $酷狗概念版音乐 群号 标题 简介 图片直链 跳转链接 音频直链$
+//  $酷狗概念版分享 群号 标题 简介 图片直链 跳转链接$
+//  $QQ浏览器音乐 群号 标题 简介 图片直链 跳转链接 音频直链$
+//  $QQ浏览器分享 群号 标题 简介 图片直链 跳转链接$
+//  $QQ空间音乐 群号 标题 简介 图片直链 跳转链接 音频直链$
+//  $QQ空间分享 群号 标题 简介 图片直链 跳转链接$
+//  $5SING音乐 群号 标题 简介 图片直链 跳转链接 音频直链$
+//  $5SING分享 群号 标题 简介 图片直链 跳转链接$
+//  $拼多多分享 群号 标题 简介 图片直链 跳转链接$
+//  $拼多多音乐 群号 标题 简介 图片直链 跳转链接 音频直链$
+
+
+
+
+//跳转到App
+//mqqapi://app/action?pkg=mcsq.nxa.secluded&cmp=mcsq.nxa.secluded.activity.SplashActivity
+
+
+
+
+打开SEC
+Q:%群号%
+A:Secluded
+B:点击我打开 Secluded
+C:https://p3fx.kgimg.com/stdmusic/240/20220530/20220530124909220859.jpg
+D:mqqapi://app/action?pkg=mcsq.nxa.secluded&cmp=mcsq.nxa.secluded.activity.SplashActivity
+E:https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70
+$简书音乐 %Q% %A% %B% %C% %D% %E%$
+
+
+
+砍一刀
+T:川建国同志
+I:马上要获选了，大家帮忙砍一刀
+P:https://img1.baidu.com/it/u=2930618756,3934212261&fm=253&fmt=auto&app=138&f=JPEG?w=523&h=323
+$拼多多分享 %群号% %T% %I% %P% %P%$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+测试随机数
+//方式1 随机产生int类型随机数 范围=[-2147483648,2147483647]
+//%随机数%
+//方式2 随机产生int类型随机数 指定 最小值 最大值
+//%随机数I-A%
+//I最小值 取值区间=[0,2147483647]
+//A最大值 取值区间=[0,2147483647]
+方式1:\n
+%随机数%\n\n
+方式2:\n
+%随机数20190329-20240607%\n\n
+方式3:\n
+1:111
+2:222
+3:333
+4:444
+5:555
+6:666
+%%随机数1-6%%\n\n
+方式4:\n
+//$随机数 最小值 最大值$
+$随机数 0 100$\n\n
+方式5:\n
+A:[100,"哈哈哈",7896,10.6304]
+//$随机数 JSON数组变量名$ 产生 [0,长度-1] 之间的值
+$随机数 A$\n\n
+方式6:\n
+//$随机数 JSON数组变量名 次数$
+$随机数 A 3$
+
+
+
+
+随机数5
+A:[100,"哈哈哈",7896,10.6304]
+//$随机数 JSON数组变量名$ 产生 [0,长度-1] 之间的值
+$随机数 A$
+
+
+
+
+
+
+
+测试模拟卡密生成
+//弄一个种子
+A:[0,1,2,3,4,5,6,7,8,9,"A","a","B","b","C","c","D","d","E","e","F","f"]
+//生成32位卡密
+$随机数 A 32$
+
+
+
+//随机数 方式7
+//A到Z字母随机 全部大写
+
+测试随机数7
+%随机数A-Z%
+
+
+//随机数 方式8
+//A到z字母随机 大小写
+
+测试随机数8
+%随机数A-z%
+
+
+//随机数 方式9
+//a到z字母随机 全部小写
+
+测试随机数9
+%随机数a-z%
+
+
+
+
+
+
+
+//混合运算
+//表达式 [中缀表达式]
+//支持运算符 + - * / %
+//结果有小数点保留小数点后两位
+
+混合运算
+[1+2*(4/2-1+(9%9+5))]\n
+[1+2*3.4]
+
+//对于 计算 '-8*-2' 这种类型的 请改写成 '(0-8)*(0-2)'
+
+
+
+//$计算 表达式$
+//$计算 表达式 保留位数$
+
+
+计算
+$计算 (0-8)*(0-2)$\n
+$计算 1+2*3.4 2$\n
+$计算 1+2*3.4 0$\n
+
+
+
+
+
+
+
+
+
+
+
+测试逻辑表达式==
+if:3337140142!=%QQ%
+OK
+else
+NO
+
+测试逻辑表达式!=
+如果:3337140142!=%QQ%
+OK
+返回
+如果尾
+NO
+
+测试逻辑表达式<
+如果:3337140142<%QQ%
+OK
+返回
+如果尾
+NO
+
+测试逻辑表达式<=
+如果:3337140142<=%QQ%
+OK
+返回
+如果尾
+NO
+
+测试逻辑表达式>
+如果:3337140142>%QQ%
+OK
+返回
+如果尾
+NO
+
+测试逻辑表达式>=
+如果:3337140142>=%QQ%
+OK
+返回
+如果尾
+NO
+
+测试逻辑表达式&
+如果:true&3337140142==%QQ%&false
+OK
+返回
+如果尾
+NO
+
+测试逻辑表达式|
+如果:false|3337140142!=%QQ%|false
+OK
+返回
+如果尾
+NO
+
+
+
+//测试逻辑表达式1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+测试参数.* .*
+参数1:%参数1%\n
+参数2:%参数2%\n
+参数个数:%参数量%\n
+原始内容:%参数-1%
+
+
+
+测试括号参数(.*) (.*)
+括号1:%括号1%\n
+括号2:%括号2%\n
+括号个数:%括号量%\n
+原始内容:%参数-1%
+
+
+
+
+测试转小写(.*)
+$小写 %括号1%$
+
+
+
+测试转大写(.*)
+$大写 %括号1%$
+
+
+
+
+
+//@变量名[键/引索]...
+
+测试JSON取值
+A:{"a":0,"bf":{"c":[12,{"d":"e"}]}}
+%A%\n\n
+b:@A[bf][c]
+d:@b[1]
+e:@A[bf][c][0]
+%b%\n\n
+%d%\n\n
+%e%
+
+
+
+//$JSON 添加 变量名 键 值$
+//$JSON 添加 变量名 值$   数组类型
+
+测试JSON添加
+A:{}
+B:[]
+C:[0,"123"]
+$JSON 添加 A 你 好$
+$JSON 添加 A U 100$
+$JSON 添加 A P %C%$
+$JSON 添加 A D 5.6$
+$JSON 添加 A F true$
+$JSON 添加 A C false$
+$JSON 添加 A L %C%$
+$JSON 添加 B 100$
+$JSON 添加 B %C%$
+$JSON 添加 B 5.6$
+$JSON 添加 B true$
+$JSON 添加 B [123]false$
+%A%\n\n\n
+%B%
+
+
+
+
+//$JSON 删除 变量名 键/引索$
+//$数组 删除 变量名 引索$
+
+
+测试JSON删除
+A:{"你":"好","h":"i"}
+B:["1",100,3.29]
+C:["1",100,3.29]
+$JSON 删除 A 你$
+$JSON 删除 B 100$
+//删除引索=2的元素   引索=0 则是 "1" 以此类推
+$数组 删除 C 2$
+%A%\n
+%B%\n
+%C%
+
+
+//$JSON 长度 变量名$
+
+测试JSON长度
+A:{"你":"好","h":"i"}
+B:["1",100,3.29]
+长度A:$JSON 长度 A$\n
+长度B:$JSON 长度 B$
+
+
+
+//$JSON 包含 变量名 键/值$
+//存在 返回 1   不存在 0
+
+测试JSON包含
+A:{"你":"好","h":"i"}
+B:["1",100,3.29]
+结果A:$JSON 包含 A h$\n
+结果B:$JSON 包含 B 100$
+
+
+//$JSON 格式化 变量名$
+
+
+测试JSON格式化
+A:{"a":0,"bf":{"c":[12,{"d":"e"}]}}
+$JSON 格式化 A$
+
+
+//$JSON 替换 变量名 老值 新值$
+
+
+测试JSON替换
+A:["1","100","3.29"]
+$JSON 替换 A 100 300$
+
+
+
+//$TABLE转JSON 内容$
+
+
+TABLE转JSON
+A:{["used_achieve"]={},["achieve_gifts_to_get"]=0,["data"]={[1012]={["id"]=1012,["achieve_time"]=1660795501,["title"]="9373",["achieve_level"]=5},[1018]={["id"]=1018,["achieve_time"]=1660795531,["title"]="9379",["achieve_level"]=5},[1016]={["id"]=1016,["achieve_time"]=1660795520,["title"]="9377",["achieve_level"]=5},[1022]={["id"]=1022,["achieve_time"]=1661572713,["title"]="9383",["achieve_level"]=3},[1020]={["id"]=1020,["achieve_time"]=1660795541,["title"]="9381",["achieve_level"]=5},[1015]={["id"]=1015,["achieve_time"]=1660723048,["title"]="9376",["achieve_level"]=5},[1009]={["id"]=1009,["achieve_time"]=1674310154,["title"]="9370",["achieve_level"]=5},[1003]={["id"]=1003,["achieve_time"]=1643203378,["title"]="9364",["achieve_level"]=5},[1001]={["id"]=1001,["achieve_time"]=1674493409,["title"]="9362",["achieve_level"]=5},[1007]={["id"]=1007,["title"]="9368"},[1004]={["id"]=1004,["achieve_time"]=1660795460,["title"]="9365",["achieve_level"]=5},[1011]={["id"]=1011,["achieve_time"]=1660795497,["title"]="9372",["achieve_level"]=5},[1013]={["id"]=1013,["title"]="9374"},[1002]={["id"]=1002,["achieve_time"]=1660741050,["title"]="9363",["achieve_level"]=5},[1006]={["id"]=1006,["achieve_time"]=1660795471,["title"]="9367",["achieve_level"]=5},[1005]={["id"]=1005,["achieve_time"]=1660795464,["title"]="9366",["achieve_level"]=5},[1027]={["id"]=1027,["title"]="9388"},[1026]={["id"]=1026,["title"]="9387"},[1024]={["id"]=1024,["title"]="9384"},[1031]={["id"]=1031,["title"]="9399"},[1028]={["id"]=1028,["title"]="9389"},[1019]={["id"]=1019,["achieve_time"]=1660795533,["title"]="9380",["achieve_level"]=5},[1021]={["id"]=1021,["achieve_time"]=1625306268,["title"]="9382",["achieve_level"]=3},[1017]={["id"]=1017,["achieve_time"]=1660795526,["title"]="9378",["achieve_level"]=5},[1025]={["id"]=1025,["title"]="9386"},[1029]={["id"]=1029,["title"]="9390"},[1030]={["id"]=1030,["title"]="9396"},[1010]={["id"]=1010,["achieve_time"]=1660795491,["title"]="9371",["achieve_level"]=5},[1008]={["id"]=1008,["achieve_time"]=1660795479,["title"]="9369",["achieve_level"]=5},[1014]={["id"]=1014,["achieve_time"]=1660795510,["title"]="9375",["achieve_level"]=5}},["next_achieve_target"]=21822,["prize"]={[1]=500,[2]=3000,[3]=2000,[4]=10000,[5]=8000,[6]=6000,[7]=1000,[8]=5000,[9]=300,[10]=4000},["msg"]="ok",["total_achieve"]=7320,["task_size"]=30,["ret"]=0}
+原内容 %A%\n\n\n
+新结果 $TABLE转JSON %A%$
+
+
+//$JSON 获取 变量名 键/引索 默认值$
+
+
+
+测试JSON获取
+A:{"69":114514}
+B:[520,114514]
+$JSON 获取 A 69 7758258$\n
+$JSON 获取 B 1 7758258$
+
+
+
+
+
+
+
+
+
+
+
+
+
+//[系统消息]定时任务
+//每隔五分钟触发一次
+
+
+
+[系统消息]定时任务
+如果:%时间mm%==00||%时间mm%==30
+$回调 执行报时$
+
+
+报时
+ok
+$回调 执行报时$
+
+
+
+
+[内部]执行报时
+$GroupListGet A$
+量:$消息数量 A GroupId$
+i:0
+:abc
+如果:%i%>=%量%
+返回
+如果尾
+Q:$获取消息 A %i% GroupId$
+i:[%i%+1]
+$休眠 3000$
+$发送 群 msg %Q% 整点报时啦$
+$标签跳转 abc$
+
+
+
+
+
+
+
+
+[群聊消息]主动进群
+%昵称%(%QQ%)加入了本群
+
+
+[群聊消息]被动进群
+%OpName%(%Op%)邀请%昵称%(%QQ%)加入了本群
+
+
+[群聊消息]主动退群
+%昵称%(%QQ%)退出了本群
+
+
+[群聊消息]被动退群
+%昵称%(%QQ%)被%OpName%(%Op%)踢出了本群
+
+
+
+
+//[群聊消息]撤回
+//%MSG%\n\n
+//如果:%Op%==%QQ%
+//%昵称%(%QQ%)撤回了一条消息
+//返回
+//如果尾
+//%OpName%(%Op%)撤回了%昵称%(%QQ%)的一条消息
+
+
+
+
+
+
+
+
+回复([0-9]+)
+$回复 %括号1%$
+Ok %括号1%\n
+%时间yyyy-MM-dd HH:mm:ss%
+
+
+
+
+
+回复
+$回复 %MsgId%$
+Ok %MsgId%\n
+%时间yyyy-MM-dd HH:mm:ss%
+
+
+
+
+
+
+
+
+图片转链接
+如果:$存在消息 Img$==false
+请您携带图片 发送消息
+返回
+如果尾
+C:$消息数量 Url$
+I:0
+如果:%I%>=%C%
+$中断$
+返回
+如果尾
+$获取消息 %I% Url$\n\n
+I:[%I%+1]
+$跳转 -6$
+
+
+
+
+
+
+//$排行榜 路径 正序/反序 数量 [序]:[键]:[键转昵称]$
+
+测试排行榜函数
+$写 排行榜/数据 苹果 100$
+$写 排行榜/数据 栗子 200$
+$写 排行榜/数据 菠萝 400$
+$写 排行榜/数据 香蕉 300$
+$排行榜 排行榜/数据 反序 100 序号:[序]\n类型:[键]\n价格:[值]\n\n$
+
+
+
+
+
+测试排行榜函数2
+$写 排行榜/数据2 %QQ% 100$
+$排行榜 排行榜/数据2 正序 100 序号:[序]\n账号:[键]\n昵称:[键转昵称]\n价格:[值]\n\n$
+
+
+
+
+
+
+
+
+
+
+
+
+//$群聊成员信息 群号 账号 结果键$
+
+
+获取群聊成员信息([0-9]+)
+$群聊成员信息 %群号% %括号1% A$
+%A%
+
+
+
+
+
+
+//[群聊消息]XML
+//有人发了\n\n
+//%Xml%
+
+
+
+
+//注释了 自己删除掉
+//[群聊消息]JSON
+//有人发了\n\n
+//%Json%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//群聊 emoji 表情
+//🏪💓🔫❔☀👢🐳🐶🐛👻🐸🐔📫🐎👧👦🐵🐷
+//🐮💉💩💤🔥💦💨✨🍓🍉🚬🌹🎉💝💣🍜🍧
+//🍞🍺🍻☕🍎👀👆👌🙏👎👏👍😳😘😭😱😂💪
+//👊😒😏😄😔😍☺😜😊😌😚😓😰😝😁
+
+
+
+//[群聊消息]表情
+//如果:$存在消息 Emoy$
+//小黄脸表情 %Emoy%
+//返回
+//如果尾
+//如果:$存在消息 Emoq$
+//超级表情 %Emoq%
+
+
+
+
+小黄脸表情
+$Emoy 13$
+
+
+
+
+
+小黄脸表情([0-9]+)
+好的 
+$Emoy %括号1%$
+
+
+
+
+
+
+随机超级表情
+#->var:
+[
+    5,
+    311,
+    312,
+    314,
+    317,
+    318,
+    319,
+    320,
+    324,
+    325,
+    337,
+    338,
+    339,
+    341,
+    342,
+    343,
+    344,
+    345,
+    346,
+    181,
+    74,
+    75,
+    351,
+    349,
+    350,
+    395,
+    114,
+    326,
+    53,
+    137,
+    333,
+    415,
+    392,
+    397,
+    364,
+    366,
+    362,
+    396,
+    360,
+    361,
+    363,
+    365,
+    367,
+    413,
+    405,
+    404,
+    406,
+    410,
+    411,
+    407,
+    408,
+    412,
+    409,
+    403,
+    402,
+    390,
+    391,
+    388,
+    389,
+    386,
+    385,
+    384,
+    387,
+    382,
+    383,
+    401,
+    400,
+    380,
+    381,
+    379,
+    376,
+    378,
+    377,
+    399,
+    398,
+    373,
+    370,
+    375,
+    368,
+    369,
+    371,
+    372,
+    374
+]
+#->var:A
+B:$随机数 A 1$
+$Emoq %B%$
+
+
+
+
+超级表情([0-9]+)
+$Emoq %括号1%$
+
+
+
+
+
+
+
+
+//发送单个消息函数
+//$发送 群 ptt 群号 音频路径或直链$
+//$发送 群 msg 群号 内容$
+//$发送 群 img 群号 图片路径或直链$
+//$发送 群 xml 群号 内容$
+//$发送 群 json 群号 内容$
+//$发送 临时 ptt 群号 成员QQ 文件路径或直链$
+//$发送 临时 msg 群号 成员QQ 内容$
+//$发送 临时 img 群号 成员QQ 文件路径或直链$
+//$发送 临时 fimg 群号 成员QQ 文件路径或直链$
+//$发送 临时 xml 群号 成员QQ 内容$
+//$发送 临时 json 群号 成员QQ 内容$
+//$发送 好友 ptt 好友QQ 文件路径或直链$
+//$发送 好友 msg 好友QQ 内容$
+//$发送 好友 img 好友QQ 文件路径或直链$
+//$发送 好友 fimg 好友QQ 文件路径或直链$
+//$发送 好友 xml 好友QQ 内容$
+//$发送 好友 json 好友QQ 内容$
+
+
+
+
+
+
+//执行索 就是 词汇体 第几行-1
+
+
+测试执行索
+第一个:%执行索%\n
+\n
+第二个:%执行索%
+
+
+
+
+//获取 词汇 当前 所在的 行数
+
+获取当前行
+当前词库行:%当前行%
+
+
+
+
+
+
+
+//$群聊成员昵称 群号 目标QQ$
+
+
+获取群聊成员昵称([0-9]+)
+昵称:$群聊成员昵称 %群号% %QQ%$
+
+
+
+
+
+
+
+
+
+
+
+//$截取字符 内容 开始引索$
+
+
+测试截取字符
+A:78912345
+B:$截取字符 %A% 1$
+%B%
+
+
+
+
+
+
+获取引擎目录
+引擎运行目录 %引擎目录%
+
+
+
+
+获取群主QQ
+%群主QQ%
+
+
+
+
+
+
+
+
+
+
+//$全局变量 键 值$
+//任何时候都可以使用
+//如果存在键则覆盖原值
+//全局变量 读取方法 '%键%' 优先读取局部变量 如果不存在局部变量则尝试读取全局变量
+//或者 $全局变量 键$ 进行读取
+
+
+
+
+
+
+[系统消息]词库初始化
+//禁止耗时操作
+//词库加载完成时 执行一次
+//你可以声明一个全局变量
+//或者其他事情
+$全局变量 A 100$
+
+
+
+
+
+
+
+
+测试写入全局变量
+已写入
+$全局变量 A 666$
+
+
+测试读取全局变量
+方式1:%A%\n
+方式2:$全局变量 A$
+
+
+
+
+
+
+
+
+
+//$群聊管理员列表 群号 结果键$
+
+
+获取群聊管理员列表
+$群聊管理员列表 %群号% A$
+%A%
+
+
+
+
+//$读文件 绝对路径$
+
+测试读文件
+$读文件 %引擎目录%AAA.txt$
+
+
+//$写文件 绝对路径 内容 结果键(可无)$
+
+
+测试写文件
+$写文件 %引擎目录%AAA.txt 666656666 A$
+%A%
+
+
+
+
+
+
+
+
+//$取括号 字符串 表达式$
+
+
+
+测试取括号
+结果 $取括号 1523695896 5(.*)6$\n
+结果 $取括号 1523695896 5(.*)6.*5(.*)6$
+
+
+
+//$正则搜索 字符串 表达式$
+//$正则匹配 字符串 表达式$
+
+
+
+测试正则搜索
+结果 $正则搜索 哈哈哈123你好456 (\d+)\D*(\d+)$
+
+
+
+
+
+
+
+
+SEC管理员登录
+如果:$SEC会话 AdminLogin root aaaa$
+登录成功
+返回
+如果尾
+登录失败
+
+
+
+
+
+
+
+//生成单号卡密 $SEC会话 KhamwiBuild 授权时长(单位:秒) 1$
+
+生成单号卡密
+$SEC会话 KhamwiBuild 86401 1$
+
+
+
+
+
+
+
+
+//生成设备卡密 $SEC会话 KhamwiBuild 授权时长(单位:秒) 2$
+
+生成设备卡密
+$SEC会话 KhamwiBuild 86401 2$
+
+
+
+
+
+
+//添加单号授权 $SEC会话 UserInfoAutAdd 登录账号 授权时长(单位:秒)$
+
+添加单号授权([0-9]+) ([0-9]+)
+$SEC会话 UserInfoAutAdd %括号1% %括号2%$
+
+
+
+
+
+
+//使用单号卡密 $SEC会话 UserInfoAutExchange 登录账号 卡密$
+
+使用单号卡密([0-9]+) (.*)
+$SEC会话 UserInfoAutExchange %括号1% %括号2%$
+
+
+
+
+
+//使用设备卡密 $SEC会话 GuidInfoAutExchange 设备别名 卡密$
+
+使用设备卡密(.*) (.*)
+$SEC会话 GuidInfoAutExchange %括号1% %括号2%$
+
+
+
+
+
+
+
+//添加设备授权 $SEC会话 GuidInfoAutAdd 设备别名 授权时长(单位:秒)$
+
+添加设备授权
+$SEC会话 GuidInfoAutAdd 112233445566778899 86401$
+
+
+
+
+
+
+//$SEC会话 GuidInfoPull 设备序号$
+
+设备授权信息
+R:$SEC会话 GuidInfoPull 1$
+如果:@A[code]==NO
+设备授权信息查询失败
+返回
+如果尾
+%R%\n\n
+设备序号 @R[seq]\n
+设备创建 @R[create-time]\n
+设备到期 @R[expire-time]
+
+
+
+
+
+
+
+
+
+
+获取启动代码
+$SEC会话 SplashCodePull$
+
+
+
+//需要管理员登录
+//监听SEC服务端在线推送消息
+
+
+
+[系统消息]SEC会话
+i:%Info%
+
+
+
+//更新 启动代码
+//$SEC会话 SplashCodePush 代码$
+
+
+
+更新启动代码
+c:%随机数100000-999999%
+代码 %c%\n
+结果 $SEC会话 SplashCodePush %c%$
+
+
+
+
+
+查询登录账号信息([0-9]+)
+$回复 %MsgId%$
+$SEC会话 UserInfoPull %括号1% cjsj scxt sxcs sqdq$
+创建时间\n%cjsj%\n\n
+上次心跳\n%scxt%\n\n
+上线次数 %sxcs% 次\n\n
+授权到期\n%sqdq%
+
+
+
+
+
+
+运营数据
+A:$SEC会话 StatisticsPull$
+如果:$字符长度 %A%$<1
+请求失败
+返回
+如果尾
+%A%
+
+
+
+
+
+
+//获取 资源商城 资源信息
+//$SEC会话 ResShopPullFrom 资源名$
+
+资源信息
+A:$SEC会话 ResShopPullFrom Secluded变量大全$
+%A%\n\n
+资源名 @A[id]\n\n
+资源来自 @A[from]\n\n
+资源类型 @A[type]\n\n
+资源名称 @A[name]\n\n
+版本名 @A[ver_name]\n\n
+版本号 @A[ver_code]\n\n
+资源大小 @A[size]\n\n
+资源摘要 @A[digest]\n\n
+资源作者 @A[author]\n\n
+资源信息 @A[info]\n\n
+下载次数 @A[down_count]\n\n
+发布时间 @A[create_time]\n\n
+更新时间 @A[last_update_time]
+
+
+//资源商城 下载/更新 资源
+//$SEC会话 CloudStorageDownload 资源名 输出文件路径$
+
+
+//把 下面的 资源名 改成 你自己的
+
+更新词库
+A:$SEC会话 ResShopPullFrom Secluded词库$
+如果:$SEC会话 CloudStorageDownload @A[down_id] %词库路径%$
+//自动重新加载词库
+更新成功
+返回
+如果尾
+更新失败
+
+
+
+
+
+//SEC提供 漂流瓶 函数
+//请勿丢垃圾内容 否则黑名单处理
+//获取 漂流瓶 $SEC会话 DriftBottleNext 来自用户$
+//获取 漂流瓶 $SEC会话 DriftBottleGet 瓶子别名$
+//投掷 漂流瓶 $SEC会话 DriftBottleThrow 来自用户 内容$ 成功返回 瓶子别名
+//删除 漂流瓶 $SEC会话 DriftBottleDelete 瓶子别名$   管理员身份可用
+
+
+
+丢瓶子(.*)
+A:$SEC会话 DriftBottleThrow %QQ% %括号1%$
+如果:@A[code]==NO
+丢瓶子失败 @A[info]
+返回
+如果尾
+丢瓶子成功\n
+新瓶子别名 @A[id]
+
+
+捡瓶子
+A:$SEC会话 DriftBottleNext %QQ%$
+瓶子别名 @A[id]\n
+瓶子来自 @A[from]\n
+瓶子被捡 @A[pick] 次\n
+瓶子投于 @A[time]\n\n
+@A[text]
+
+
+获取瓶子(.*)
+A:$SEC会话 DriftBottleGet %括号1%$
+瓶子别名 @A[id]\n
+瓶子来自 @A[from]\n
+瓶子被捡 @A[pick] 次\n
+瓶子投于 @A[time]\n\n
+@A[text]
+
+
+删除瓶子(.*)
+如果:$SEC会话 DriftBottleDelete %括号1%$
+删除成功
+返回
+如果尾
+删除失败
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$SEC会话 MCodePull 邮件地址$
+
+
+申请邮件验证(.*)
+A:$SEC会话 MCodePull %括号1%$
+%A%\n\n
+@A[msg]
+
+
+
+
+
+
+//$SEC会话 MCodePush 邮件地址 内容$
+
+推送邮件验证(.*) (.*)
+$SEC会话 MCodePush %括号1% %括号2%$
+
+
+
+//$SEC会话 MCodeCheck id$
+
+
+查询邮件验证(.*)
+A:$SEC会话 MCodeCheck %括号1%$
+%A%\n\n
+@A[msg]
+
+
+
+
+
+// 即时日志推送
+// $SEC会话 InstantLogPush t c l v$
+// t=日志间隔
+// c=日志数量
+// l=日志类型 (R,G,B,Y,W)
+// v=日志内容
+
+
+即时日志推送
+$SEC会话 AdminLogin MCSQNXY MCSQQ$
+t:300
+c:30
+l:G
+v:感谢您使用 Secluded
+R:$SEC会话 InstantLogPush %t% %c% %l% %v%$
+如果:@R[code]==NO
+%R%
+返回
+如果尾
+已经向 @R[message] 个客户端推送日志\n\n
+%R%
+
+
+
+
+
+推送年末祝福
+t:3000
+c:10
+l:G
+v:随着2024年的尾声即将敲响，让我们一同倒数，迎接新的一年。在这一刻，我想送上最诚挚的祝福：愿你的2024年画上一个完美的句号，所有的愿望和梦想都得到实现。愿你的2025年开启新的篇章，充满希望和机遇。愿你在新的一年里，健康、快乐、成功，以及更多的爱和欢笑。
+R:$SEC会话 InstantLogPush %t% %c% %l% %v%$
+如果:@R[code]==NO
+%R%
+返回
+如果尾
+已经向 @R[message] 个客户端推送年末祝福\n\n
+%R%
+
+
+
+
+推送新年祝福
+t:3000
+c:10
+l:G
+v:在这个新年之际，我想对你说：愿你的新年充满探索与发现，像使用 Secluded 时的每一次冒险一样，充满惊喜和成长。愿你的旅程平安，收获满满，新年快乐，未来可期！新年快乐，愿你的每一天都像你探索的世界一样，独一无二且充满可能！
+R:$SEC会话 InstantLogPush %t% %c% %l% %v%$
+如果:@R[code]==NO
+%R%
+返回
+如果尾
+已经向 @R[message] 个客户端推送新年祝福\n\n
+%R%
+
+
+
+
+
+
+
+
+
+
+
+
+
+//QQ Tea 加密/解密 函数
+//$QQTEA加密 key 文本数据$
+//$QQTEA解密 key 加密结果数据$
+//key均使用16字节长度转成hex 32位
+//注意加密采用随机因子每次加密结果都不一样 但是可以正常解密的
+
+
+测试QQTEA加密
+$QQTEA加密 EA4E581127E75654D6828A4082EE3827 哈哈哈$
+
+
+测试QQTEA解密
+$QQTEA解密 EA4E581127E75654D6828A4082EE3827 282D2A0CC91CCF4A2F089FA48FE872F21916206671D13BBD$
+
+
+
+
+
+
+//URL编码/解码函数
+//编码 $URLEncoder 内容$
+//解码 $URLDecoder 内容$
+
+
+测试URL编码
+$URLEncoder http://www.baidu.com?t=hello$
+
+
+测试URL解码
+$URLDecoder https%3A%2F%2Fmultimedia.nt.qq.com.cn%2Fdownload%3Fappid%3D1407%26fileid3DCggyNTYzMjI4NhIUSbdJFWKfWgsqFpUuqAnL_mF7iIkY8xog_woo96mIw9L4hgNQgL2jAQ%26spec%3D0%26rkey%3DCAQSKAB6JWENi5LM6xiJqy19DjXxatKPUF96L5kIC51uThDkOExlp1zpOb4$
+
+
+
+
+
+[群聊消息]拍一拍
+%OpName%(%Op%) %GroupBeatABeat% %昵称%(%QQ%)
+
+
+
+测试群聊拍一拍
+$群聊拍一拍 %群号% %QQ%$
+
+
+测试好友拍一拍
+$好友拍一拍 %QQ%$
+
+
+
+//获取文件大小函数
+//$文件大小 路径$
+
+
+
+测试文件大小
+A:S:\A.mp3
+$文件大小 %A%$
+
+
+
+//将 文件(文件夹) 复制 到 新的 文件(文件夹)
+//$文件复制 原路径 新路径$
+
+
+
+测试文件复制
+OK $文件复制 S:/000/A.txt S:/69.txt$
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$群聊精华添加 群号 消息id$
+//$群聊精华删除 群号 消息id$
+
+
+
+添加群聊精华([0-9]+)
+OK
+$群聊精华添加 %群号% %括号1%$
+
+
+删除群聊精华([0-9]+)
+OK
+$群聊精华删除 %群号% %括号1%$
+
+
+
+//$频道精华添加 频道号 子频道号 消息id$
+//$频道精华删除 频道号 子频道号 消息id$
+
+
+
+添加频道精华([0-9]+)
+OK
+$频道精华添加 %频道号% %子频道号% %括号1%$
+
+
+删除频道精华([0-9]+)
+OK
+$频道精华删除 %频道号% %子频道号% %括号1%$
+
+
+
+
+//自动判断消息来源
+//$精华添加 消息id$
+//$精华删除 消息id$
+
+
+
+添加精华([0-9]+)
+OK
+$精华添加 %括号1%$
+
+
+删除精华([0-9]+)
+OK
+$精华删除 %括号1%$
+
+
+
+
+
+
+//$解散群聊 群号$
+//解散群聊 群主身份 有效
+
+
+
+
+//$点赞列表 结果键$
+//获取登录账号 名片赞最近被赞列表 返回JSON到结果键
+
+
+
+获取点赞列表
+A:$点赞列表$
+%A%
+
+
+
+
+
+//发送 群聊/好友 戳一戳
+//$群聊戳一戳 群号 戳一戳大小$
+//$好友戳一戳 好友QQ 戳一戳大小$
+//受到QQ限制 戳一戳大小因采用随机化
+//或每次发送戳一戳对上一次戳一戳大小进行+1再发送
+
+
+测试群聊戳一戳
+$群聊戳一戳 %群号% %随机数0-9%$
+
+
+测试好友戳一戳
+$好友戳一戳 %QQ% %随机数0-9%$
+
+
+
+[群聊消息]戳一戳
+%昵称%(%QQ%) 发了戳一戳
+
+
+[好友消息]戳一戳
+不要戳我啦
+
+
+
+
+
+
+
+
+频道信息
+频道号 %频道号%\n
+频道名 %频道名%\n
+子频道号 %子频道号%\n
+子频道名 %子频道名%
+
+
+
+
+发送频道消息
+$新建消息 A$
+$添加消息 A Guild$
+$添加消息 A GuildId %频道号%$
+$添加消息 A ChannelId %子频道号%$
+$添加消息 A Text OK$
+$发送消息 A B$
+
+
+
+
+
+
+
+//$群聊骰子 群号 点数$
+//$好友骰子 好友QQ 点数$
+//$频道骰子 频道号 子频道号 点数$
+//点数:1~6
+//禁止 用于违法赌博 违者SEC黑名单吃灰
+
+
+
+测试群聊骰子
+R:%随机数1-6%
+已发送 %R% 点 的骰子
+$群聊骰子 %群号% %R%$
+
+
+
+[群聊消息]骰子
+%昵称%(%QQ%) 发了点数为 %Dice% 的骰子
+
+
+
+
+测试好友骰子
+R:%随机数1-6%
+已发送 %R% 点 的骰子
+$好友骰子 %QQ% %R%$
+
+
+
+[好友消息]骰子
+%昵称%(%QQ%) 发了点数为 %Dice% 的骰子
+
+
+
+测试频道骰子
+R:%随机数1-6%
+已发送 %R% 点 的骰子
+$频道骰子 %频道号% %子频道号% %R%$
+
+
+
+[频道消息]骰子
+%昵称%(%QQ%) 发了点数为 %Dice% 的骰子
+
+
+
+//猜拳
+//$群聊猜拳 群号 类型$
+//$好友猜拳 好友QQ 类型$
+//$频道猜拳 频道号 子频道号 类型$
+//类型 '石头' ‘剪刀’ ‘布’
+
+
+
+
+测试群聊猜拳
+$群聊猜拳 %群号% 石头$
+
+
+
+[群聊消息]猜拳
+%昵称%(%QQ%) 发了猜拳 %FingerGuess%
+
+
+
+
+测试好友猜拳
+$好友猜拳 %QQ% 剪刀$
+
+
+
+[好友消息]猜拳
+%昵称%(%QQ%) 发了猜拳 %FingerGuess%
+
+
+
+测试频道猜拳
+$频道猜拳 %频道号% %子频道号% 布$
+
+
+
+[频道消息]猜拳
+%昵称%(%QQ%) 发了猜拳 %FingerGuess%
+
+
+
+
+
+
+
+
+
+
+测试发送函数
+OK
+$发送$
+OK666
+$图片 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+$发送$
+$图片 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+
+
+
+
+测试频道消息
+ok
+
+
+
+
+
+获取频道用户头像
+I:%频道用户头像%
+%I%
+//$图片 %I%$
+
+
+
+
+
+
+
+//群聊打卡
+//$群聊打卡 群号$
+
+
+
+群聊打卡
+OK
+$群聊打卡 %群号%$
+
+
+
+
+
+
+//闪字功能
+//$闪字 闪字类型 闪字内容$
+//$群聊闪字 群号 闪字类型 闪字内容$
+//$好友闪字 好友QQ 闪字类型 闪字内容$
+
+
+
+
+测试闪字
+$闪字 2002 哈哈哈$
+
+
+测试群聊闪字
+$群聊闪字 %群号% 2002 哈哈哈$
+
+
+
+测试好友闪字
+$好友闪字 %QQ% 2002 哈哈哈$
+
+
+
+[群聊消息]闪字
+闪字类型 %Type%\n
+闪字内容 %FlashWord%
+
+
+
+[好友消息]闪字
+闪字类型 %Type%\n
+闪字内容 %FlashWord%
+
+
+
+
+添加我为管理员
+$GroupModifyAdmin %群号% Add %QQ% A$
+如果:$存在消息 A OK$
+修改成功
+返回
+如果尾
+$获取消息 A No$
+
+
+删除我的管理员
+$GroupModifyAdmin %群号% Remove %QQ% A$
+如果:$存在消息 A OK$
+修改成功
+返回
+如果尾
+$获取消息 A No$
+
+
+
+
+我的消息id
+//格式1
+你的当前消息id:%MsgId%\n
+//格式2
+你的当前消息id:%Msgbar%\n
+//格式3
+你的当前消息id:%MessageID%
+
+
+
+艾特
+$艾特 %QQ% %昵称%$ Ok
+
+
+
+
+
+
+艾特全体成员
+$艾特全体成员$ Ok
+
+
+
+
+
+
+//撤回群聊消息
+//$撤回 群聊 群号 消息id$
+
+//撤回 好友聊天 中的 自己发的消息
+//$撤回 好友 好友QQ 消息id$
+
+//撤回频道消息
+//$撤回 频道 频道号 子频道号 消息id$
+
+//撤回 自动判断消息来源
+//$撤回 消息id$
+
+
+
+
+测试撤回([0-9]+)
+OK
+$撤回 %括号1%$
+
+
+
+
+
+
+
+
+测试匿名消息
+$新建消息 msg$//新建消息对象
+$添加消息 msg Group$//添加消息flags
+$添加消息 msg GroupId %GroupId%$//添加群号
+$添加消息 msg GroupMsgAnonymous$//添加消息flags
+$添加消息 msg Text 匿名消息Ok$//添加文本消息
+$发送消息 msg rsp$//发送消息
+如果:$存在消息 rsp Close$
+本群已经关闭匿名消息功能
+返回
+如果尾
+本群已经开启匿名消息功能
+//上面是形式1
+//形式2 直接添加一条函数$GroupMsgAnonymous$就行了
+
+
+
+
+
+赞我
+//点赞别人有三种方式
+//这个是直接点赞没有点赞结果
+//$赞 %QQ% 10$
+//$点赞 %QQ% 10$     //10是点赞数量 取值区间=[1,20]
+//这个是直接点赞并把结果放到A变量里面
+//$点赞 %QQ% 10 A$
+//下面是具体过程
+//$点赞 %QQ% 10 A$
+//$获取消息 A Ok 网络错误$
+//上面的方式弃用，改用系统消息进行回赞 避免白嫖党
+请您先赞我,我会自动回赞
+
+
+
+
+
+
+
+
+
+
+
+//[群聊消息]图片
+//%昵称%(%QQ%)发了[$消息数量 Img$]张图片
+
+
+
+
+
+
+图片
+//格式1
+±img=https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140±
+//格式2
+$图片 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//格式3
+±img:https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140±
+
+
+
+
+
+
+
+本地图片
+$图片 S:/图片.png$
+
+
+
+
+
+
+
+
+
+自定义请求头图片
+//$图片 路径 请求头JSON名 应答头JSON名$
+A:https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140
+//这个是请求头JSON
+B:{"cookie":"我是cookie内容"}
+//这个是应答头JSON
+C:{}
+$图片 %A% B C$\n
+%C%
+
+
+
+
+
+图文
+OK
+$图片 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+好的
+$图片 https://q4.qlogo.cn/g?b=qq&nk=%Uin%&s=140$
+
+
+
+
+
+
+
+
+
+闪照
+//格式1
+$闪照 https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//格式2
+//±fimg=https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140±
+//格式3
+//±fimg:https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140±
+
+
+
+
+
+
+
+
+
+//[群聊消息]语音
+//%昵称%(%QQ%)发了一条语音\n\n
+//%MSG%
+
+
+
+//发送语音默认不编码
+//需要编码则 写入函数 $添加消息 SilkEncode$
+//不编码直接发音频文件只能 安卓设备 听
+//电脑 苹果 设备无法收听
+
+
+
+
+语音
+//添加编码
+$添加消息 SilkEncode$
+//格式1 第2个参数5是 语音时间 第三个是 语音路径或者直链
+$语音 5 https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70$
+//格式2
+//±ptt https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70±
+//格式3
+//$发送 群 ptt %群号% https://m.kugou.com/api/v1/wechat/index?uuid=574d1101a331614d56f05f232dbb330d&album_audio_id=106863208&ext=m4a&apiver=2&cmd=101&album_id=8448864&hash=9d28faa0941c2e12c00dc4f8d20a7730&plat=0&version=11309&share_chl=qq_client&mid=304000542424130980213570746762493114069&key=8be2f563b18b4a8483ddc4ef4c4cd432&_t=1663479934&user_id=746798753&sign=c141a9e2a33a3215ea69346e7b633c70$
+
+
+
+
+
+
+
+
+
+本地语音
+A:C:\Users\MCSQNXY\Music\Alan Walker、Peder Elias、Putri Ariani - Who I Am.mp3
+$添加消息 SilkEncode$
+$语音 100 %A%$
+
+
+
+语音([\s\S]*)
+$添加消息 SilkEncode$
+$语音 100 %括号1%$
+
+
+
+
+
+
+//$SILK编码 音频路径/链接$
+//编码成功 返回路径 失败返回空内容
+//自动保存到本地 约一天后自动删除
+
+
+
+
+
+SILK编码
+I:C:\Users\MCSQNXY\Downloads\A.mp3
+B:%时间戳毫秒%
+O:$SILK编码 %I%$
+R:[%时间戳毫秒%-%B%]
+如果:$字符长度 %O%$>0
+原始大小 [$文件大小 %I%$/1000/1000] MB\n
+原始音频 %I%\n\n
+编码大小 [$文件大小 %O%$/1000/1000] MB\n
+编码音频 %O%\n\n
+编码耗时 %R% 毫秒
+$发送 群 ptt %群号% %O%$
+返回
+如果尾
+编码失败
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+动图
+//请自行替换路径 这个是静态图
+//格式1
+//±gif=http://gchat.qpic.cn/gchatpic_new/0/0-0-1C3E2B8A145955BFCA98AE82D9E8BD40/0?term=2±
+//±gif=C:\Users\MCSQNXY\Downloads\9CB87E0DAB9312FB8DD5E6EE2FB2333A.gif±
+//格式2
+$动图 http://gchat.qpic.cn/gchatpic_new/0/0-0-1C3E2B8A145955BFCA98AE82D9E8BD40/0?term=2$
+//格式3
+//±gif:https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140±
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$群文件 群号 列表 子文件夹别名$
+//返回JSON数据
+//type 1=文件 2=文件夹
+//id 文件/文件夹 别名 获取子文件夹内的 文件 就填这个别名
+//name 文件/文件夹 名称
+//size 文件大小
+//value 文件下载次数
+//下面是详细返回格式
+//[
+//    {
+//        "type": 2,
+//        "id": "/53b7cff9-1dcd-4c54-baeb-64d93ada3e74",
+//        "name": "萌新专属文件夹",
+//        "size": 0,
+//        "value": 0
+//    },
+//    {
+//        "type": 1,
+//        "id": "/d0ea3486-5bec-4d8e-8f66-3991007f5342",
+//        "name": "31250.mp4",
+//        "size": 50426783,
+//        "value": 9
+//    }
+//]
+
+
+
+//获取根目录的 文件/文件夹 列表 别名填'/'
+
+
+
+获取群文件列表
+P:/
+A:$群文件 %群号% 列表 %P%$
+L:$JSON 长度 A$
+如果:%L%==0
+请求失败 或无 文件/文件夹
+返回
+如果尾
+i:0
+如果:%i%<%L%
+$回调 群文件列表$
+i:[%i%+1]
+$跳转 -3$
+
+
+[内部]群文件列表
+t:@A[%i%][type]
+如果:%t%==1
+文件名称 @A[%i%][name]\n
+文件大小 @A[%i%][size] 字节\n
+下载次数 @A[%i%][value] 次\n
+文件别名 @A[%i%][id]\n\n
+返回
+如果尾
+如果:%t%==2
+文件夹名称 @A[%i%][name]\n
+文件夹别名 @A[%i%][id]\n\n
+
+
+
+
+
+//上传群聊文件
+//$群文件 群号 上传 子文件夹别名 文件名称 文件路径或直链 进度键(可无)$
+//这里的 子文件夹别名 就是 群文件列表那个别名 上传到 根目录 就填 '/'
+//文件名称是指 上传到群文件的 名称
+//上传失败 返回 0   上传成功 返回 新文件 别名
+
+
+测试上传文件
+正在上传
+$发送$
+P:/
+N:大漂亮.mp4
+L:S:/AAA.mp4
+R:$群文件 %群号% 上传 %P% %N% %L% 群文件上传$
+如果:%R%==0
+上传失败
+返回
+如果尾
+上传成功 新文件 别名 %R%
+
+
+
+[系统消息]处理进度
+如果:%处理进度%==群文件上传
+文件上传中 [(%Offset%/%Size%)*100] %
+
+
+
+[群聊消息]新文件
+%昵称%(%QQ%)上传了文件\n\n
+文件名称 %Name%\n\n
+文件大小 %Size% 字节\n\n
+文件摘要 %MD5%\n\n
+文件别名 %Id%
+
+
+
+
+
+
+//删除 群文件的文件夹
+//$群文件 群号 删除文件夹 文件夹别名$
+//失败 返回 0   成功 返回 1
+
+
+
+测试删除群聊文件夹(.*)
+$群文件 %群号% 删除文件夹 %括号1%$
+
+
+
+
+//删除 群文件的文件
+//$群文件 群号 删除文件 子文件夹别名 文件别名$
+//这里的 子文件夹别名 就是 群文件列表那个别名 删除 根目录 的文件 就填 '/'
+//失败 返回 0   成功 返回 1
+
+
+
+测试删除群聊文件?(.*)
+P:/
+$群文件 %群号% 删除文件 %P% %括号1%$
+
+
+
+//创建 群文件的文件夹
+//$群文件 群号 创建文件夹 文件夹名称$
+//失败 返回 0   成功 返回 1
+
+
+
+测试创建群聊文件夹(.*)
+$群文件 %群号% 创建文件夹 %括号1%$
+
+
+
+//重命名 群文件的文件夹
+//$群文件 群号 重命名文件夹 文件夹别名 新的文件夹名称$
+//失败 返回 0   成功 返回 1
+
+
+
+测试重命名群聊文件夹(.*)
+$群文件 %群号% 重命名文件夹 %括号1% 我是文件夹666$
+
+
+//移动文件 
+//$群文件 群号 移动文件 原文件夹别名 文件别名 新文件夹别名$
+// 根目录 别名 '/'
+
+
+
+测试移动群聊文件
+A:/
+B:/7e65645e-3706-4305-b89c-42c54b706def
+C:/83b031de-61d4-43c1-ac51-0e53a4f505bd
+$群文件 %群号% 移动文件 %A% %B% %C%$
+
+
+
+
+//获取文件下载链接
+//$群文件 群号 链接 别名$
+//安卓手表(扫码登录) 用不了
+
+
+
+获取群文件下载链接(.*)
+A:$群文件 %群号% 链接 %括号1%$
+%A%\n\n
+链接 @A[Url]
+
+
+
+
+//群文件 下载
+//$群文件 群号 下载 别名 输出文件$
+
+
+
+群文件下载
+N:/e3f82d40-a18c-4bd0-a43e-b2b3bab907c8
+O:C:\Users\MCSQNXY\Downloads\ABC.txt
+R:$群文件 %群号% 下载 %N% %O%$
+%R%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$键列表 路径 列表 [序][键]$
+//$键列表 路径 添加 内容$
+//$键列表 路径 删除 内容$
+//$键列表 路径 存在 内容$   存在 返回 1 不存在 返回 0
+//$键列表 路径 清空$   清空列表
+//$键列表 路径 数量$   列表长度
+//$键列表 路径 列表存在精确 内容$ 精确 是 一模一样的值   是 返回 1 不是 返回 0 
+//$键列表 路径 列表存在模糊 内容$ 模糊 是 内容 中 含有  是 返回 1 不是 返回 0 
+
+
+
+获取违禁词列表
+A:序号 [序]\n内容 [键]\n
+$键列表 违禁词.db 列表 %A%$
+\n\n共计 $键列表 违禁词.db 数量$ 个违禁词 
+
+
+添加违禁词?(.*)
+OK
+$键列表 违禁词.db 添加 %括号1%$
+
+
+
+删除违禁词?(.*)
+OK
+$键列表 违禁词.db 删除 %括号1%$
+
+
+存在违禁词?(.*)
+如果:$键列表 违禁词.db 存在 %括号1%$
+存在
+返回
+如果尾
+不存在
+
+
+清空违禁词列表
+OK
+$键列表 违禁词.db 清空$
+
+
+
+判断精确违禁词?(.*)
+如果:$键列表 违禁词.db 列表存在精确 %括号1%$
+存在
+返回
+如果尾
+不存在
+
+
+判断模糊违禁词?(.*)
+如果:$键列表 违禁词.db 列表存在模糊 %括号1%$
+存在
+返回
+如果尾
+不存在
+
+
+
+键列表转JSON
+$键列表 违禁词.db JSON$
+
+
+
+
+
+
+//保存
+//$键列表 路径 保存$
+//由于 这些 增删改查 不会立即保存到文件
+//必须等当前词汇全部执行完毕才会统一写入文件
+//有必要可以强制保存
+
+
+
+
+
+
+
+
+
+
+
+//$文件行数 路径$
+
+
+获取文件行数
+$文件行数 S:/哈哈哈.txt$ 行
+
+
+
+//$群聊禁言列表 群号$
+//获取群聊成员被禁言中的列表
+
+
+
+
+获取群聊被禁言列表
+$群聊禁言列表 %群号%$
+
+
+
+
+
+//$执行 函数体/变量$
+
+
+
+
+
+菜单
+Secluded变量大全 没有菜单噢 这是一个例子教程词库
+
+
+
+
+XA照片
+$XA照片$
+
+
+
+
+
+//$文件一行 路径 行数 默认值$
+//单行限制 8192 字节
+//读取文件中任意一行字符串
+
+
+
+获取文件一行
+//文件路径
+A:S:/哈哈哈.txt
+//获取文件第一行内容
+B:1
+//没有找到默认返回
+C:没有内容
+$文件一行 %A% %B% %C%$
+
+
+
+
+
+
+//$加群 群号$
+//$退群 群号$
+
+
+
+
+
+
+//发送 xml 消息 单行
+
+
+XML
+card:1
+<?xml version='1.0' encoding='UTF-8' ?><msg serviceID="104" templateID="1" brief="大家好，我是群主。水瓶座女一枚~"><item layout="2"><picture cover="" /><title>新人入群</title></item><source /></msg>
+
+
+
+//发送 xml 消息 多行 格式化模式
+
+
+
+XMLALL
+card_all:
+<?xml version='1.0' encoding='UTF-8' ?>
+<msg serviceID="104" templateID="1" brief="大家好，我是群主。水瓶座女一枚~">
+<item layout="2">
+<picture cover="" />
+<title>新人入群</title>
+</item>
+<source/>
+</msg>
+
+
+
+
+
+//发送 Json 消息 单行
+
+
+JSON
+json:
+{"app":"com.tencent.structmsg","config":{"ctime":1647043280,"forward":true,"token":"356aa7568f832701cd5047c6dcfc833a","type":"normal"},"desc":"音乐","extra":{"app_type":1,"appid":205141,"msg_seq":7073997018748087532,"uin":3337140142},"meta":{"music":{"action":"","android_pkg_name":"","app_type":1,"appid":205141,"ctime":1647043280,"desc":"Alan Walker、Benjamin Ingrosso · World Of…","jumpUrl":"https://t1.kugou.com/song.html?id=3ReQpd3zxV2","musicUrl":"https://m.kugou.com/api/v1/wechat/index?uuid=7b82aea001d40c5dbddd885ae42ea9a3&album_audio_id=351076529&ext=m4a&apiver=2&cmd=101&album_id=50530456&hash=01c4b2497492d3a2475262b52ad62571&plat=0&version=11123&share_chl=qq_client&mid=3320991661582202751225362500412588691&key=512905974aaff6c1ce23f4052747a0f6&_t=1647043273&user_id=746798753&sign=a0ed201997b0377ed0d7ee7d801f734c","preview":"http://imge.kugou.com/stdmusic/120/20211118/20211118203703380169.jpg","sourceMsgId":"0","source_icon":"https://open.gtimg.cn/open/app_icon/00/20/51/41/205141_100_m.png?t=1639645811","source_url":"","tag":"酷狗音乐","title":"Man On The Moon OK","uin":3337140142}},"prompt":"[分享]Man On The Moon","ver":"0.0.0.1","view":"music"}
+//{"app":"com.tencent.gamecenter.gamegift","desc":"QQ手游消息","meta":{"shareData":{"appid":"1104466820","item_id":1079539,"policy_id":7855173,"tianshu_footageid":0}},"prompt":"今日QQ专属礼包请查收！","sourceName":"1","ver":"1.0.0.25","view":"index","config":{"ctime":1673975502,"token":"c23765ae2e7cec397def9dc885465d15"}}
+
+
+
+//发送 Json 消息 多行 格式化模式
+
+JSONALL
+json_all:
+{
+    "app": "com.tencent.structmsg",
+    "desc": "音乐",
+    "prompt": "[分享]Man On The Moon",
+    "ver": "0.0.0.1",
+    "view": "music",
+    "config": {
+        "ctime": 1647043280,
+        "forward": true,
+        "token": "356aa7568f832701cd5047c6dcfc833a",
+        "type": "normal"
+    },
+    "extra": {
+        "app_type": 1,
+        "appid": 205141,
+        "msg_seq": 7073997018748087532,
+        "uin": 3337140142
+    },
+    "meta": {
+        "music": {
+            "action": "",
+            "android_pkg_name": "",
+            "app_type": 1,
+            "appid": 205141,
+            "ctime": 1647043280,
+            "desc": "Alan Walker、Benjamin Ingrosso · World Of…",
+            "jumpUrl": "https://t1.kugou.com/song.html?id=3ReQpd3zxV2",
+            "musicUrl": "https://m.kugou.com/api/v1/wechat/index?uuid=7b82aea001d40c5dbddd885ae42ea9a3&album_audio_id=351076529&ext=m4a&apiver=2&cmd=101&album_id=50530456&hash=01c4b2497492d3a2475262b52ad62571&plat=0&version=11123&share_chl=qq_client&mid=3320991661582202751225362500412588691&key=512905974aaff6c1ce23f4052747a0f6&_t=1647043273&user_id=746798753&sign=a0ed201997b0377ed0d7ee7d801f734c",
+            "preview": "http://imge.kugou.com/stdmusic/120/20211118/20211118203703380169.jpg",
+            "sourceMsgId": "0",
+            "source_icon": "https://open.gtimg.cn/open/app_icon/00/20/51/41/205141_100_m.png?t=1639645811",
+            "source_url": "",
+            "tag": "酷狗音乐",
+            "title": "CPDD",
+            "uin": 3337140142
+        }
+    }
+}
+
+
+
+JSON([\s\S]*)
+json:
+%括号1%
+
+
+
+
+
+
+
+
+
+
+
+
+//$签名卡片 内容$
+//签名卡片消息
+//签名成功 返回新的JSON   失败返回空内容
+
+
+
+签名卡片
+如果:$未授权$
+登录账号未授权
+返回
+如果尾
+A:{"app":"com.tencent.structmsg","config":{"ctime":1647043280,"forward":true,"token":"356aa7568f832701cd5047c6dcfc833a","type":"normal"},"desc":"音乐","extra":{"app_type":1,"appid":205141,"msg_seq":7073997018748087532,"uin":3337140142},"meta":{"music":{"action":"","android_pkg_name":"","app_type":1,"appid":205141,"ctime":1647043280,"desc":"Alan Walker、Benjamin Ingrosso · World Of…","jumpUrl":"https://t1.kugou.com/song.html?id=3ReQpd3zxV2","musicUrl":"https://m.kugou.com/api/v1/wechat/index?uuid=7b82aea001d40c5dbddd885ae42ea9a3&album_audio_id=351076529&ext=m4a&apiver=2&cmd=101&album_id=50530456&hash=01c4b2497492d3a2475262b52ad62571&plat=0&version=11123&share_chl=qq_client&mid=3320991661582202751225362500412588691&key=512905974aaff6c1ce23f4052747a0f6&_t=1647043273&user_id=746798753&sign=a0ed201997b0377ed0d7ee7d801f734c","preview":"http://imge.kugou.com/stdmusic/120/20211118/20211118203703380169.jpg","sourceMsgId":"0","source_icon":"https://open.gtimg.cn/open/app_icon/00/20/51/41/205141_100_m.png?t=1639645811","source_url":"","tag":"搁浅音乐","title":"Man On The Moon OK","uin":3337140142}},"prompt":"[分享]Man On The Moon","ver":"0.0.0.1","view":"music"}
+B:$签名卡片 %A%$
+如果:$字符长度 %B%$<1
+签名失败
+返回
+如果尾
+json:
+%B%
+
+
+
+签名卡片([\s\S]*)
+B:$签名卡片 %括号1%$
+如果:$字符长度 %B%$<1
+签名失败
+返回
+如果尾
+json:
+%B%
+
+
+
+
+
+//获取 文件/文件夹 列表
+//$文件列表 路径$
+
+
+
+
+获取文件夹列表
+ $文件列表 S:/哈哈哈$
+
+
+
+
+
+
+
+//打印日志
+//$红色日志 内容$
+//$绿色日志 内容$
+//$蓝色日志 内容$
+//$白色日志 内容$
+//$黄色日志 内容$
+
+
+
+
+
+
+测试日志
+OK
+$红色日志 红色日志OK$
+$绿色日志 绿色日志OK$
+$蓝色日志 蓝色日志OK$
+$白色日志 白色日志OK$
+$黄色日志 黄色日志OK$
+
+
+
+
+
+
+
+
+
+
+
+
+
+[内部]群聊聊天记录1
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 群聊
+$添加消息 A Group$
+//聊天记录 来源 群号
+$添加消息 A GroupId %群号%$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加文本消息
+$添加消息 A Text 哈哈哈$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+1:%A:MsgId%
+
+[内部]群聊聊天记录2
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 群聊
+$添加消息 A Group$
+//聊天记录 来源 群号
+$添加消息 A GroupId %群号%$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加图片消息
+$添加消息 A Img https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+2:%A:MsgId%
+
+[内部]群聊聊天记录3
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 群聊
+$添加消息 A Group$
+//聊天记录 来源 群号
+$添加消息 A GroupId %群号%$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加文本消息
+$添加消息 A Text 图文$
+//聊天记录 添加图片消息
+$添加消息 A Img https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+3:%A:MsgId%
+
+[内部]群聊聊天记录4
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 群聊
+$添加消息 A Group$
+//聊天记录 来源 群号
+$添加消息 A GroupId %群号%$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加卡片消息 聊天记录套娃
+X:<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="[聊天记录]" m_resid="UIwnJsyPEwIbn00CwScFbgva7er8VM51LtseFOLKV8bEj0BdUxj5Dz7JvEepJkW6" m_fileName="16418" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">xiao:  6</title><title size="26" color="#777777" maxLines="2" lineSpace="12">南晨:  [图片]</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看2条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+$添加消息 A Xml %X%$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+4:%A:MsgId%
+
+[内部]群聊聊天记录5
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 群聊
+$添加消息 A Group$
+//聊天记录 来源 群号
+$添加消息 A GroupId %群号%$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//添加视频封面
+$添加消息 A Img https://q4.qlogo.cn/g?b=qq&nk=3337140142&s=140$
+//添加视频路径
+$添加消息 A Video https://gxh.vip.qq.com/xydata/funcall/funCall/2735/media.mp4$
+//添加视频时长 60s
+$添加消息 A Time 60$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+5:%A:MsgId%
+
+
+
+群聊聊天记录
+//构造 聊天记录 id
+$回调 群聊聊天记录1$
+//构造 聊天记录 id
+$回调 群聊聊天记录2$
+//构造 聊天记录 id
+$回调 群聊聊天记录3$
+//构造 聊天记录 id
+$回调 群聊聊天记录4$
+//构造 聊天记录 id
+$回调 群聊聊天记录5$
+$新建消息 X$
+//聊天记录 来源是 群聊
+$添加消息 X Group$
+//聊天记录 来源 群号
+$添加消息 X GroupId %群号%$
+//添加 聊天记录 消息
+$添加消息 X MultiMsg %1%$
+$添加消息 X MultiMsg %2%$
+$添加消息 X MultiMsg %3%$
+$添加消息 X MultiMsg %4%$
+$添加消息 X MultiMsg %5%$
+//聊天记录 添加时间
+$添加消息 X Time %时间戳秒%$
+//聊天记录 构造请求发送
+$发送消息 X X$
+//聊天记录 获取 构造结果 m_resid
+I:%X:Id%
+//聊天记录 获取 构造结果 m_fileName
+N:%X:Name%
+card_all:
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<msg serviceID="35" templateID="1" action="viewMultiMsg" brief="[聊天记录]" m_resid="%I%" m_fileName="%N%" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0">
+<item layout="1" advertiser_id="0" aid="0">
+<title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title>
+<title size="26" color="#777777" maxLines="2" lineSpace="12">xiao:  6</title>
+<title size="26" color="#777777" maxLines="2" lineSpace="12">南晨:  [图片]</title>
+<hr hidden="false" style="0" />
+<summary size="26" color="#777777">查看2条转发消息</summary>
+</item><source name="聊天记录" icon="" action="" appid="-1" />
+</msg>
+
+
+
+
+
+
+
+
+
+
+[内部]好友聊天记录1
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 好友
+$添加消息 A Friend$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加文本消息
+$添加消息 A Text 哈哈哈$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+1:%A:MsgId%
+
+[内部]好友聊天记录2
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 好友
+$添加消息 A Friend$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加图片消息
+$添加消息 A Img https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+2:%A:MsgId%
+
+[内部]好友聊天记录3
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 好友
+$添加消息 A Friend$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加文本消息
+$添加消息 A Text 图文$
+//聊天记录 添加图片消息
+$添加消息 A Img https://q4.qlogo.cn/g?b=qq&nk=%QQ%&s=140$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+3:%A:MsgId%
+
+[内部]好友聊天记录4
+$新建消息 A$
+//聊天记录 构造标志
+$添加消息 A MultiMsgPut$
+//聊天记录 来源是 好友
+$添加消息 A Friend$
+//聊天记录 发言人 QQ
+$添加消息 A Uin %QQ%$
+//聊天记录 发言人 昵称
+$添加消息 A UinName %昵称%$
+//聊天记录 添加卡片消息 聊天记录套娃
+X:<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="[聊天记录]" m_resid="UIwnJsyPEwIbn00CwScFbgva7er8VM51LtseFOLKV8bEj0BdUxj5Dz7JvEepJkW6" m_fileName="16418" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">xiao:  6</title><title size="26" color="#777777" maxLines="2" lineSpace="12">南晨:  [图片]</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看2条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+$添加消息 A Xml %X%$
+//聊天记录 id 构造请求发送
+$发送消息 A A$
+//聊天记录 id 获取
+4:%A:MsgId%
+
+
+
+好友聊天记录
+//构造 聊天记录 id
+$回调 好友聊天记录1$
+//构造 聊天记录 id
+$回调 好友聊天记录2$
+//构造 聊天记录 id
+$回调 好友聊天记录3$
+//构造 聊天记录 id
+$回调 好友聊天记录4$
+$新建消息 X$
+//聊天记录 来源是 好友
+$添加消息 X Friend$
+//聊天记录 来源 好友QQ
+$添加消息 X Uin %QQ%$
+//添加 聊天记录 消息
+$添加消息 X MultiMsg %1%$
+$添加消息 X MultiMsg %2%$
+$添加消息 X MultiMsg %3%$
+$添加消息 X MultiMsg %4%$
+//聊天记录 构造请求发送
+$发送消息 X X$
+//聊天记录 获取 构造结果 m_resid
+I:%X:Id%
+//聊天记录 获取 构造结果 m_fileName
+N:%X:Name%
+card_all:
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<msg serviceID="35" templateID="1" action="viewMultiMsg" brief="[聊天记录]" m_resid="%I%" m_fileName="%N%" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0">
+<item layout="1" advertiser_id="0" aid="0">
+<title size="34" maxLines="2" lineSpace="12">好友的聊天记录</title>
+<title size="26" color="#777777" maxLines="2" lineSpace="12">xiao:  6</title>
+<title size="26" color="#777777" maxLines="2" lineSpace="12">南晨:  [图片]</title>
+<hr hidden="false" style="0" />
+<summary size="26" color="#777777">查看2条转发消息</summary>
+</item><source name="聊天记录" icon="" action="" appid="-1" />
+</msg>
+
+
+
+
+
+
+
+//[系统消息]心跳
+//$信息日志 收到心跳$
+//50秒一次
+
+
+
+
+
+
+//$小梦网络验证 项目id 密钥 服务器返回的数据$
+
+
+
+测试小梦网络验证
+$小梦网络验证 5549346a-abd1-48c0-9eaf-bffeb1cffe9c 0445C81F432AC1D674B454C696E88B3B {"code":"148887855454","sign":"931b1cb28f04f55328f559c8af5e8fe5","edtime":1682870881000,"status":"normal"}$
+
+
+
+
+
+
+获取数组最大值
+A:[1000,500,2]
+V:0
+I:0
+L:$JSON 长度 A$
+如果:%I%>=%L%
+最大值是 %V%
+返回
+如果尾
+如果:%V%<@A[%I%]
+V:@A[%I%]
+I:[%I%+1]
+$跳转 -7$
+返回
+如果尾
+I:[%I%+1]
+$跳转 -11$
+
+
+
+
+
+
+//引擎匹配到当前词汇头耗时
+
+匹配耗时
+匹配耗时 %匹配耗时% 毫秒
+
+
+
+
+
+
+上线模式
+%上线模式%
+
+
+
+
+
+
+
+
+[群聊消息]成员被禁
+%昵称%(%QQ%)被%OpName%(%Op%)禁言了%Time%秒
+
+
+
+[群聊消息]成员解禁
+%昵称%(%QQ%)被%OpName%(%Op%)解除了禁言
+
+
+
+
+
+//标签跳转函数 类似于 跳转函数
+//在此基础上减少了数行数的麻烦
+//函数 $标签跳转 标签名$
+//标签 命名规则 ':标签名' 标签名前面加 ':' 不能少了
+//注意: 如果 函数在下面 标签在上面 需要特别注意 这样可能导致死循环
+//可以配合 如果 + 中断函数 使用
+
+
+//向下跳转
+
+测试标签跳转
+69\n
+$标签跳转 标签1314$
+520
+:标签1314
+114514
+
+
+//向上跳转
+//求和运算
+
+
+测试标签跳转2
+i:0
+:69
+如果:%i%>=100
+%i%
+返回
+如果尾
+i:[%i%+1]
+$标签跳转 69$
+
+
+
+
+测试标签跳转3
+i:0
+:69
+如果:%i%>=100
+%i%
+返回
+如果尾
+i:[%i%+1]
+$jump :69$
+
+
+
+
+获取主人列表
+$主人列表 A$
+%A%
+
+
+我是不是主人
+%QQ%\n\n
+如果:$主人 %QQ%$
+你是主人哦
+返回
+如果尾
+你不是主人哦
+
+
+添加主人(.*)
+$添加主人 %括号1%$
+已添加主人 %括号1% 好的
+
+
+删除主人(.*)
+$删除主人 %括号1%$
+已删除主人 %括号1% 好的
+
+
+清空主人
+好的
+$清空主人$
+
+
+
+//[系统消息]上线
+//[系统消息]下线
+//[系统消息]掉线
+
+
+
+
+
+
+
+
+[内部]运行时间计算
+s:[(%时间戳毫秒%-%时间戳进程%)/1000]
+如果:%s%>=86400
+r:$计算 %s%/86400 0$天$计算 (%s%/3600)%24 0$时[%s%/60%60]分[%s%%60]秒
+返回
+如果尾
+如果:%s%>=3600
+r:$计算 (%s%/3600)%24 0$时[%s%/60%60]分[%s%%60]秒
+返回
+如果尾
+如果:%s%>=60
+r:[%s%/60%60]分[%s%%60]秒
+返回
+如果尾
+r:[%s%%60]秒
+
+
+
+运行时长
+$回调 运行时间计算$
+进程已运行 %r%
+
+
+
+
+系统属性
+$回调 运行时间计算$
+软件版本 $prop 软件版本$\n
+操作系统 $prop 操作系统$\n
+电池百分 $prop 电池百分$ %\n
+电池状态 $prop 电池状态$ \n
+电池电源 $prop 电池电源$ \n
+电池可用 $prop 电池可用$ 秒\n
+电池电压 $prop 电池电压$ V\n
+电池技术 $prop 电池技术$ \n
+电池温度 $prop 电池温度$ ℃\n
+内存利用 $prop 内存利用$ %\n
+内存可用 $prop 内存可用$ GB\n
+内存总共 $prop 内存总共$ GB\n
+储存利用 $prop 储存利用$ %\n
+储存可用 $prop 储存可用$ GB\n
+储存总共 $prop 储存总共$ GB\n
+网络类型 $prop 网络类型$\n
+设备厂商 $prop 设备厂商$\n
+设备品牌 $prop 设备品牌$\n
+处理器利用 $prop 处理器利用$ %\n
+处理器温度 $prop 处理器温度$ ℃\n
+处理器架构 $prop 处理器架构$\n
+处理器核心 $prop 处理器核心$\n
+处理器线程 $prop 处理器线程$\n
+进程已运行 %r%
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$Base64Encode 内容$
+//$Base64Decode 内容$
+//$Base64Encode 内容 key$
+//$Base64Decode 内容 key$
+//这个 key 是指定编码规则
+//默认的是 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+//长度必须为64字节
+
+
+
+测试BASE64编码
+$Base64Encode 哈哈哈$
+
+
+测试BASE64解码(.*)
+$Base64Decode %括号1%$
+
+
+
+
+
+
+
+
+
+
+//%临时画布%   生成一个临时的画布文件 缓存文件自动管理
+//$画布 对象名 创建 宽度 高度 十六进制颜色(底色)$   创建画布
+//$画布 对象名 创建 文件路径/网址$
+//$画布 对象名 保存 输出文件路径$   保存画布
+
+//十六进制颜色采用 ARGB 格式 下面是常用颜色
+//纯红色 FFFF0000
+//纯绿色 FF00FF00
+//纯蓝色 FF0000FF
+//纯黑色 FF000000
+//纯白色 FFFFFFFF
+//透明色 00000000
+
+
+//画布是一个平面 坐标起点全部在 左上角 往 右下角 递增
+
+
+
+
+画布创建
+F:%临时画布%
+$画布 A 创建 1080 1080 FF00FF00$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+//$画布 对象名 调整 宽度 高度$
+//调整画布的宽高
+
+
+
+
+//图片HSV处理
+//$画布 对象名 HSV$
+
+
+
+画布HSV
+F:%临时画布%
+$画布 A 创建 S:/D.png$
+$画布 A HSV$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+//从画布中插入一张图片
+//$画布 对象名 插图 文件路径 宽度 高度 X Y$
+//宽度 将原图重新调整合适大小插入
+//高度 将原图重新调整合适大小插入
+//X 从X轴插入
+//Y 从Y轴插入
+//坐标圆点(0,0)在左上角
+
+
+画布插图
+F:%临时画布%
+//$画布 A 创建 S:/C.png$
+$画布 A 创建 1080 1080 FF0000FF$
+$画布 A 插图 S:/B.png 520 520 30 30$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//从画布中插入一张普通图片 (RGB)
+//$画布 对象名 插图 缓存对象名 宽度 高度 X Y$
+
+
+画布插图2
+F:%临时画布%
+$画布 C 创建 520 520 FF000000$
+$画布 B 创建 520 520 FF0000FF$
+$画布 A 创建 1080 1080 FF00FF00$
+$画布 A 插图 B 520 520 30 30$
+$画布 A 插图 C 420 420 30 30$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+画布插图(.*)
+F:%临时画布%
+$画布 A 创建 1080 1080 FFFFFFFF$
+$画布 A 插图 %括号1% 600 600 50 50$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//从画布中插入一张透明图片 (ARGB)
+//必须携带透明通道 要不然插进去没有透明效果
+//$画布 对象名 插透 文件路径/网址 宽度 高度 X Y$
+
+
+画布插透
+F:%临时画布%
+$画布 A 创建 S:/A.png$
+//$画布 A 创建 1080 1080 0000FFFF$
+$画布 A 插透 S:/AAA.png 620 620 500 200$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+//画布绘制文字
+//$画布 对象名 文字 字体大小 字体颜色 X Y 内容$
+//字体形态需要用 字体文件 去 提供
+
+
+
+
+
+画布文字
+F:%临时画布%
+$画布 A 创建 1080 1080 FF000000$
+$画布 A 文字 50 F90090FF 100 300 因为这便是梦诞生之地$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//画布绘制文字
+//$画布 对象名 文字 画笔粗细 字体大小 字体颜色 X Y 内容$
+//画笔粗细 -1 为填充
+//当前仅 Windows 端可用
+
+
+
+画布文字2
+F:%临时画布%
+$画布 A 创建 1080 1080 FF000000$
+$画布 A 文字 -1 50 F90090FF 100 300 因为这便是梦诞生之地$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+
+//自定义画布字体
+//不设置则使用内置字体
+//$画布 对象名 字体 文件路径$
+//需要注意的是 绘制中文的时候 字体文件一般情况下都是 好几MB+的
+//几百kb的字体文件基本上是不可以绘制中文的
+
+
+
+
+
+画布字体
+F:%临时画布%
+$画布 A 创建 S:/A.png$
+//指定字体文件路径
+$画布 A 字体 S:/msyh.ttf$
+$画布 A 插透 S:/B.png 620 620 500 200$
+$画布 A 插透 S:/B.png 620 620 600 300$
+$画布 A 文字 40 FFFF0000 700 200 两杯可乐达已经下肚$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//画布参数
+//图片宽高获取
+//$画布 对象名/文件路径/网址 参数$
+//返回 JSON
+
+
+
+画布参数
+$画布 A 创建 1080 1080 0000FFFF$
+A:$画布 A 参数$
+宽度 @A[width] \n
+高度 @A[height] \n
+通道数 @A[channels]
+
+
+
+
+
+//绘制圆形
+//$画布 对象名 圆形 画笔粗细 颜色 X Y R$
+//画笔粗细 -1为填充
+//颜色 ARGB
+//XY 中心坐标
+//R 半径
+
+
+
+画布圆形
+F:%临时画布%
+$画布 A 创建 1080 1080 FFFFFFFF$
+$画布 A 圆形 5 FFFF00FF 540 540 400$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//绘制椭圆
+//$画布 对象名 椭圆 画笔粗细 颜色 X Y A B 角度$
+//画笔粗细 -1为填充
+//颜色 ARGB
+//XY 中心坐标
+//A 长轴长度
+//B 短轴长度
+//角度 椭圆按照中心坐标逆时针旋转
+
+
+画布椭圆
+F:%临时画布%
+$画布 A 创建 1080 1080 FFFFFFFF$
+$画布 A 椭圆 20 FFFF00FF 540 540 400 250 45$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//绘制直线 两点确定一条直线
+//$画布 对象名 直线 画笔粗细 颜色 X1 Y1 X2 Y2$
+// X1 Y1 第一个坐标
+// X2 Y2 第二个坐标
+
+
+
+画布直线
+F:%临时画布%
+$画布 A 创建 1080 1080 FFFFFFFF$
+$画布 A 直线 20 FF0000FF 100 100 900 900$
+$画布 A 直线 20 FF0000FF 900 100 100 900$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+
+//绘制多边形
+//$画布 对象名 多边 画笔粗细 颜色 JSON数组变量名$
+//JSON数组 规则 [X1,Y1,X2,Y2,X3,Y3,...] 以此类推
+//点数三个起步
+
+
+画布多边
+F:%临时画布%
+$画布 A 创建 1080 1080 FFFFFFFF$
+J:[100,100,200,200,100,300,200,400,400,100,200,600,1000,600,100,100,750,990,450,850]
+$画布 A 多边 20 FF00FFFF J$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+//裁剪图片
+//$画布 对象名 裁剪 圆形$
+
+
+
+裁剪圆形
+F:%临时画布%
+$画布 A 创建 S:/MCSQNXY.png$
+$画布 A 调整 128 128$
+$画布 A 裁剪 圆形$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+
+// 资源商城-其他资源 可以获取 这两个图片素材
+
+
+画布点赞
+$画布 A 创建 C:\Users\MCSQNXY\Pictures\Secluded.png$
+$画布 A 调整 356 356$
+$画布 A 裁剪 圆形$
+$画布 B 创建 C:\Users\MCSQNXY\Downloads\合成图\点赞底图.png$
+$画布 B 插透 A 356 356 30 680$
+F:%临时画布%
+$画布 B 保存 %F%$
+$图片 %F%$\n
+A:$画布 A 参数$
+A宽度 @A[width] \n
+A高度 @A[height] \n
+A通道数 @A[channels]\n
+B:$画布 B 参数$
+B宽度 @B[width] \n
+B高度 @B[height] \n
+B通道数 @B[channels]
+
+
+
+
+
+
+
+
+
+
+
+
+//$文图 内容$
+//$文图 内容 背景颜色 文字颜色$
+//$文图 内容 背景颜色 文字颜色 字体文件$
+//把文字转成图片返回路径
+
+
+
+
+
+//十六进制颜色采用 ARGB 格式 下面是常用颜色
+//纯红色 FFFF0000
+//纯绿色 FF00FF00
+//纯蓝色 FF0000FF
+//纯黑色 FF000000
+//纯白色 FFFFFFFF
+//透明色 00000000
+
+
+
+
+
+文图([\s\S]*)
+±img=$文图 %括号1%$±
+
+
+
+
+
+
+
+画布黑色
+F:%临时画布%
+$画布 A 创建 512 512 FF000000$
+$画布 A 保存 %F%$
+$图片 %F%$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//由于词库引擎处理词汇是多线程处理，所以会导致线程抢数据问题，从而导致数据错误（这个是概率问题，不一定会发生，群聊信息刷屏大概率触发）
+//一般情况下多发生在 $读/写 ...$ 等函数，所以需要对词库块进行加锁处理，确保词汇块在多个线程共同执行下，只有一个线程能够执行完成词汇块，紧接着下一个线程
+// 词汇块 上锁     $上锁 键$   
+// 词汇块 解锁     $解锁 键$
+//下面是例子，注意细节！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！！
+
+
+
+
+
+测试线程锁
+//定义一个全局变量，以供多线程计数
+$全局变量 线程锁计数 0$
+i:0
+如果:%i%<100
+i:[%i%+1]
+//这里模拟多线程操作
+$调用 线程锁$
+$跳转 -3$
+返回
+如果尾
+请您等待五秒
+$发送$
+//休眠5秒 等待100个线程全部操作完毕
+$休眠 5000$
+结果:$全局变量 线程锁计数$
+
+
+
+[内部]线程锁
+//模拟休眠以免执行过快
+$休眠 2000$
+//定义一个名为Abc的锁
+$上锁 Abc$
+//获取变量
+i:$全局变量 线程锁计数$
+//模拟运算
+n:[%i%+1]
+//重新返回值
+$全局变量 线程锁计数 %n%$
+//解锁
+$解锁 Abc$
+
+
+
+//执行 上面的 测试线程锁 得到的 结果是100 如果把 上锁和解锁 删除掉可能不是100
+//注意的是 上锁和解锁 必须同时出现  不可以单独出现 否则线程阻塞无法释放
+
+
+
+
+
+
+
+
+
+//对应的是   群聊管理 界面
+//$群聊禁用列表 获取$
+//$群聊禁用列表 清空$
+//$群聊禁用列表 添加 群号$
+//$群聊禁用列表 删除 群号$
+
+
+获取群聊禁用列表
+$群聊禁用列表 获取$
+
+
+清空群聊禁用列表
+OK
+$群聊禁用列表 清空$
+
+
+添加群聊禁用列表([0-9]+)
+OK
+$群聊禁用列表 添加 %括号1%$
+
+
+删除群聊禁用列表([0-9]+)
+OK
+$群聊禁用列表 删除 %括号1%$
+
+
+
+
+
+
+//对应的是   好友管理 界面
+//$好友禁用列表 获取$
+//$好友禁用列表 清空$
+//$好友禁用列表 添加 QQ$
+//$好友禁用列表 删除 QQ$
+
+
+
+获取好友禁用列表
+$好友禁用列表 获取$
+
+
+清空好友禁用列表
+OK
+$好友禁用列表 清空$
+
+
+添加好友禁用列表([0-9]+)
+OK
+$好友禁用列表 添加 %括号1%$
+
+
+删除好友禁用列表([0-9]+)
+OK
+$好友禁用列表 删除 %括号1%$
+
+
+
+
+
+//启动或停止 exe可执行程序
+//$启动程序 路径$
+//$停止程序 路径$
+//当且仅当Windows版可用
+
+
+
+测试启动程序
+A:D:\Push\x64\Release\PushServer.exe
+如果:$启动程序 %A%$
+启动成功
+返回
+如果尾
+启动失败
+
+
+测试停止程序
+A:D:\Push\x64\Release\PushServer.exe
+如果:$停止程序 %A%$
+停止成功
+返回
+如果尾
+停止失败
+
+
+
+
+
+
+
+//$二进制转十进制 二进制内容$
+//$八进制转十进制 八进制内容$
+//$十六进制转十进制 十六进制内容$
+
+
+
+二进制转十进制
+a:010011110101110110100010
+二进制:%a%\n\n
+十进制:$二进制转十进制 %a%$
+
+
+八进制转十进制
+a:23656642
+八进制:%a%\n\n
+十进制:$八进制转十进制 %a%$
+
+
+十六进制转十进制
+a:4F5DA2
+十六进制:%a%\n\n
+十进制:$十六进制转十进制 %a%$
+
+
+
+
+//$十进制转二进制 十进制内容$
+//$十进制转八进制 十进制内容$
+//$十进制转十六进制 十进制内容$
+
+
+十进制转二进制
+a:5201314
+十进制:%a%\n\n
+二进制:$十进制转二进制 %a%$
+
+
+十进制转八进制
+a:5201314
+十进制:%a%\n\n
+八进制:$十进制转八进制 %a%$
+
+
+十进制转十六进制
+a:5201314
+十进制:%a%\n\n
+十六进制:$十进制转十六进制 %a%$
+
+
+
+//$十六进制转字符串 内容$
+
+
+
+十六进制转字符串
+V:E4BDA0E5A5BD
+原始 %V%\n
+结果 $十六进制转字符串 %V%$
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//压缩文件夹或文件
+//$压缩 文件夹/文件路径 输出文件路径$
+//解压压缩包
+//$解压 压缩包路径 输出文件夹路径$
+
+
+测试压缩
+a:%时间戳毫秒%
+$压缩 S:/0 S:/1/哈哈哈.zip$
+压缩耗时 [%时间戳毫秒%-%a%] ms
+
+
+测试解压
+a:%时间戳毫秒%
+$解压 S:/1/哈哈哈.zip S:/1/out$
+解压耗时 [%时间戳毫秒%-%a%] ms
+
+
+
+
+
+星柳阴光
+$星柳阴光$
+
+
+
+
+//给定一个图片文件路径或直链
+//获取图床链接
+//$图链 文件路径/直链$
+
+
+
+图链
+A:$图链 S:/B.png$
+%A%\n\n
+链接 @A[Url]
+
+
+
+
+
+//[群聊消息]打卡
+//%MSG%\n\n
+//%昵称%(%QQ%) 完成打卡啦
+
+
+
+
+[好友消息]撤回
+%MSG%\n\n
+撤回了一条消息
+
+
+
+
+
+//$扫码登录 域名 回调id 回调词汇头$
+//这个是同步线程
+
+
+
+空间扫码登录
+I:%时间戳毫秒%
+提交申请 %I%
+$发送$
+$扫码登录 qzone.qq.com %I% 扫码回调$
+
+
+
+群聊扫码登录
+I:%时间戳毫秒%
+提交申请 %I%
+$发送$
+$扫码登录 qun.qq.com %I% 扫码回调$
+
+
+
+会员扫码登录
+I:%时间戳毫秒%
+提交申请 %I%
+$发送$
+$扫码登录 vip.qq.com %I% 扫码回调$
+
+
+
+
+
+
+[内部]扫码回调
+D:%WebScanCodeLogin%
+如果:@D[code]==login_qrcode_get
+$图片 @D[file]$
+您的二维码 @D[id]
+返回
+如果尾
+如果:@D[code]==login_wait
+等待扫码 @D[id]
+返回
+如果尾
+如果:@D[code]==login_refuse
+拒绝登录 @D[id]
+返回
+如果尾
+如果:@D[code]==login_timeout
+扫码超时 @D[id]
+返回
+如果尾
+如果:@D[code]==login_purpose
+登录确认 @D[id]
+返回
+如果尾
+如果:@D[code]==login_ok
+登录成功 @D[id]\n
+%D%
+返回
+如果尾
+登录失败 @D[id]\n
+%D%
+
+
+
+
+
+
+
+
+
+
+
+
+//$删除字符 字符 内容$
+//$删除空格 内容$
+
+
+
+测试删除字符
+A:op
+B:jjjjop856op52
+结果 $删除字符 %A% %B%$
+
+
+
+测试删除空格
+A:jj jjop 856 op52
+结果 $删除空格 %A%$
+
+
+
+
+//$SIG 值$ 或者 $ptqrtoken 值$
+//网站二维码qrsig计算ptqrtoken
+
+
+
+SIG
+$SIG 47381ce8caf6e4ba9d46490dad2e28d50f9f5e375ca1e92ba0b071ed5a49ab397aa47e4ebc571548977b62b3c510671814be98e0e8977f4cba783f1abd70267e$
+
+
+
+
+
+
+
+调试模式
+如果:$调试模式$
+当前词库已开启调试模式
+返回
+如果尾
+当前词库已关闭调试模式
+
+
+
+开启调试模式
+$调试模式 开$
+已开启调试模式
+
+
+
+关闭调试模式
+$调试模式 关$
+已关闭调试模式
+
+
+
+
+
+
+
+
+
+
+
+
+
+//$pow m n$
+//m的n次方运算
+
+
+测试pow
+$pow 2 25$
+
+
+//$abs 值$
+//绝对值计算
+
+
+测试abs
+$abs -3$
+
+
+//$sqrt 值$
+//开平方
+
+
+测试sqrt
+$sqrt 9$
+
+
+//$sqrt n 值$
+//开n次方
+
+
+测试sqrt2
+$sqrt 2 99$
+
+
+
+//$exp 值$
+
+exp
+//自然数e的9次方
+$exp 9$
+
+
+
+//计算 三角函数
+//弧度 = 角度*3.14159265358979323846/180
+//$sin 弧度$
+//$cos 弧度$
+//$tan 弧度$
+//$asin 值$
+//$acos 值$
+//$atan 值$
+
+
+
+sin
+//角度
+a:60
+//弧度
+r:[%a%*3.14159265358979323846/180]
+$sin %r%$
+
+
+cos
+//角度
+a:60
+//弧度
+r:[%a%*3.14159265358979323846/180]
+$cos %r%$
+
+
+tan
+//角度
+a:60
+//弧度
+r:[%a%*3.14159265358979323846/180]
+$tan %r%$
+
+
+asin
+$asin 0.5$
+
+
+acos
+$acos 0.5$
+
+
+atan
+$atan 0.5$
+
+
+
+
+
+
+
+//AES加密
+//$aes_256_encrypt key(十六进制) 字符串$
+//默认 填充 iv 为 16个字节 0
+//返回十六进制字符串
+
+
+aes256加密
+k:0011223344556677001122334455667700112233445566770011223344556677
+r:我是加密内容
+明文\n\n
+%r%\n\n\n
+密文\n\n
+$aes_256_encrypt %k% %r%$
+
+
+
+
+
+//AES解密
+//$aes_256_decrypt key(十六进制) 十六进制字符串$
+//返回字符串
+
+
+
+aes256解密
+k:0011223344556677001122334455667700112233445566770011223344556677
+r:DB1193B4DF7AEB7CB2F4652CFFE8FD4C9BDF5AE8257B3A9526C5A824F3348434
+密文\n\n
+%r%\n\n\n
+明文\n\n$aes_256_decrypt %k% %r%$
+
+
+
+
+
+
+
+
+//允许词库引擎检查运行时性能问题
+//防止词库出现严重运行漏洞
+
+
+
+安全模式
+如果:$安全模式$
+当前词库已开启安全模式
+返回
+如果尾
+当前词库已关闭安全模式
+
+
+
+开启安全模式
+$安全模式 开$
+已开启安全模式
+
+
+
+关闭安全模式
+$安全模式 关$
+已关闭安全模式
+
+
+
+
+
+
+
+加好友
+$新建消息 x$
+$添加消息 x UserFriendAdd$
+$添加消息 x Uin Qq号$
+$发送消息 x r$
+%r%
+
+
+
+
+删好友
+$新建消息 x$
+$添加消息 x UserFriendRemove$
+$添加消息 x Uin Qq号$
+$发送消息 x r$
+%r%
+
+
+
+
+
+
+
+
+
+[群聊消息]红包
+%昵称%(%QQ%)\n发了一个红包
+
+
+
+
+
+
+
+//$好友文件 Uin 上传 文件名称 文件路径或直链 进度键(可无)$
+//发送好友文件
+
+
+
+
+
+
+发好友文件
+正在上传
+$发送$
+N:Clion.sh
+L:S:/Clion.sh
+$好友文件 %QQ% 上传 %N% %L% 好友文件上传$
+
+
+
+
+
+
+
+[系统消息]处理进度
+如果:%处理进度%==好友文件上传
+文件上传中 [(%Offset%/%Size%)*100] %
+
+
+
+
+
+
+//$字符串转十六进制 内容$
+
+
+
+字符串转十六进制
+R:哈哈哈
+N:$字符串转十六进制 %R%$
+原内容 %R%\n\n
+现内容 %N%
+
+
+
+
+
+
+//$位运算 左值 运算符 右值$
+
+
+
+
+位运算%
+L:100
+R:2
+N:$位运算 %L% % %R%$
+左值 %L%\n
+右值 %R%\n
+结果 %N%
+
+
+
+位运算&
+L:100
+R:2
+N:$位运算 %L% & %R%$
+左值 %L%\n
+右值 %R%\n
+结果 %N%
+
+
+
+位运算^
+L:100
+R:2
+N:$位运算 %L% ^ %R%$
+左值 %L%\n
+右值 %R%\n
+结果 %N%
+
+
+
+位运算|
+L:100
+R:2
+N:$位运算 %L% | %R%$
+左值 %L%\n
+右值 %R%\n
+结果 %N%
+
+
+
+位运算<<
+L:100
+R:2
+N:$位运算 %L% << %R%$
+左值 %L%\n
+右值 %R%\n
+结果 %N%
+
+
+
+位运算>>
+L:100
+R:2
+N:$位运算 %L% >> %R%$
+左值 %L%\n
+右值 %R%\n
+结果 %N%
+
+
+
+
+//$词汇头$
+//获取词库的全部词汇头
+//不建议频繁使用
+
+
+
+
+词汇头
+$词汇头$
+
+
+
+
+
+
+//%线程数量%
+//获取 当前词库 运行所占线程的个数 
+//正常情况下 不会超过 10个线程 频繁使用 调用函数 除外
+//如有 线程 一直不减 可能要考虑 有 死循环
+
+
+
+
+
+
+线程数量
+%线程数量%
+
+
+
+
+
+
+
+
+
+
+
+//[系统消息]邮件
+//收到别人发的邮件消息
+//具体看 %MSG%
+
+
+
+
+
+[系统消息]邮件
+A:收到一条邮件\n\n%MSG%
+$发送 群 msg 615113364 %A%$
+
+
+
+
+
+
+
+
+
+//通过 好友聊天界面 发起的 转账收款 通知
+
+[好友消息]转账
+收到一笔转账\n
+金额 %TransferMoney% 元\n\n
+%MSG%
+
+
+
+
+
+
+打钱
+A:C:\Users\MCSQNXY\Pictures\3290534620.jpg
+$图片 %A%$
+
+
+
+
+
+
+
+
+//通过 收款二维码 发起的 转账收款 通知
+
+[系统消息]转账
+A:收到一笔转账\n金额 %TransferMoney% 元\n\n%MSG%
+$发送 群 msg 615113364 %A%$
+
+
+
+
+
+
+
+灰色消息([\s\S]*)
+$新建消息 H$
+$添加消息 H Group$
+$添加消息 H GroupId %括号1%$
+$添加消息 H Text 额$
+//$添加消息 H Img S:/A.png$
+//$添加消息 H GrayTip 跨平台框架就用SEC\nhttps://nxa.lanzoui.com/b02vdd48h$
+$添加消息 H GrayTip 黑阔教你们做人$
+$发送消息 H R$
+=== %R%
+
+
+
+
+
+
+
+
+
+
+
+// 方式 1
+// $修改群聊名称 群号 新群名$
+
+
+
+修改群名([\s\S]*)
+if:$主人 %QQ%$
+$修改群聊名称 %群号% %括号1%$
+else
+无权操作
+
+
+
+
+// 方式 2
+
+修改群聊名称([\s\S]*)
+$新建消息 A$
+$添加消息 A GroupModifyName$
+$添加消息 A GroupId %群号%$
+$添加消息 A GroupName %括号1%$
+$发送消息 A R$
+=== %R%
+
+
+
+
+
+
+[群聊消息]新群名
+%昵称%(%QQ%) 修改了群聊名称\n\n新的群名: %群名%
+
+
+
+
+
+
+
+
+
+
+
+// 方式 1
+
+
+
+表情回应1
+$新建消息 A$
+$添加消息 A Group$
+$添加消息 A GroupId %群号%$
+$添加消息 A MsgId %MsgId%$
+$添加消息 A EmoReply 76$
+$发送消息 A R$
+=== %R%
+
+
+
+
+
+// 方式 2
+// $群聊表情回应 群号 消息id 表情id$
+
+
+
+表情回应2
+OK
+$群聊表情回应 %群号% %MsgId% 76$
+
+
+
+
+
+//[群聊消息]表情回应
+//%OpName%(%Op%) 用表情(%EmoReply%)回应了一条(%MsgId%)消息\n\n
+//%MSG%
+
+
+
+
+
+
+
+
+
+
+测试协议包
+$新建消息 A$
+//需要应答包
+$添加消息 A Reply$
+//协议命令
+$添加消息 A Cmd trpc.qq_new_tech.status_svc.StatusService.SsoHeartBeat$
+//协议包体
+$添加消息 A Dat 080112020801180020B2EAD0B906$
+$发送消息 A R$
+%R%
+
+
+
+
+
+
+
+
+
+
+测试性能
+B:%时间戳毫秒%
+I:1
+L:100000
+:a
+if:%I%<%L%
+I:[%I%+1]
+$标签跳转 a$
+else
+范围 1 ~ %L%\n
+耗时 [%时间戳毫秒%-%B%] 毫秒
+
+
+
+
+
+
+
+
+
+
+
+
+
+//最后编辑时间 v2024-12-28 22:49
+
+
+
