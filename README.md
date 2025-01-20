@@ -17,6 +17,7 @@
 ![image](/images/w0.png)
 ![image](/images/w1.png)
 ![image](/images/w2.png)
+![image](/images/w3.png)
 
 # Linux
 - 下载解压 找到对应 系统文件夹 x64 进入 使用 cd 命令 切换工作目录
